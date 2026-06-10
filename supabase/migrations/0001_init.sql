@@ -117,14 +117,14 @@ create trigger trg_score_match
   after update of home_score, away_score, status on public.matches
   for each row execute function public.score_match();
 
--- Bloquea pronósticos una vez iniciado el partido
+-- Bloquea pronósticos a partir de 1 hora antes del inicio del partido
 create or replace function public.check_prediction_open() returns trigger
 language plpgsql set search_path = public as $$
 declare k timestamptz;
 begin
   select kickoff_at into k from public.matches where id = new.match_id;
-  if now() >= k then
-    raise exception 'Los pronósticos para este partido ya están cerrados';
+  if now() >= k - interval '1 hour' then
+    raise exception 'Los pronósticos se cierran 1 hora antes del partido';
   end if;
   new.updated_at := now();
   return new;

@@ -11,6 +11,9 @@ const PICKS: { value: "1" | "X" | "2"; label: string }[] = [
   { value: "2", label: "2" },
 ];
 
+// Los pronósticos se cierran 1 hora antes del inicio del partido.
+const LOCK_MS = 60 * 60 * 1000;
+
 export default function PredictionGrid({
   teams,
   matches,
@@ -63,8 +66,9 @@ export default function PredictionGrid({
   function MatchRow({ m }: { m: Match }) {
     const home = teamById[m.home_team_id];
     const away = teamById[m.away_team_id];
-    const locked =
-      new Date(m.kickoff_at).getTime() <= Date.now() || m.status === "finished";
+    const kickoff = new Date(m.kickoff_at).getTime();
+    const closesAt = kickoff - LOCK_MS;
+    const locked = closesAt <= Date.now() || m.status === "finished";
     const current = picks[m.id];
     return (
       <div className="nx-card rounded-xl p-3">
@@ -78,9 +82,22 @@ export default function PredictionGrid({
               hour: "2-digit",
               minute: "2-digit",
             })}
-            {locked ? " · 🔒" : ""}
+            {locked ? " · 🔒 cerrado" : ""}
           </span>
         </div>
+        {!locked && (
+          <div className="mb-2 text-center text-[11px] text-nxteal/80">
+            Puedes cambiar tu pronóstico hasta{" "}
+            {new Date(closesAt).toLocaleString("es-MX", {
+              weekday: "short",
+              day: "numeric",
+              month: "short",
+              hour: "2-digit",
+              minute: "2-digit",
+            })}{" "}
+            (1 h antes)
+          </div>
+        )}
         <div className="flex items-center gap-3">
           <div className="flex-1 text-right text-sm font-medium">
             {home?.flag} {home?.name}
