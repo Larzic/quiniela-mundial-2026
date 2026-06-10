@@ -1,21 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
-  const router = useRouter();
   const supabase = createClient();
 
-  const [step, setStep] = useState<"email" | "code">("email");
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
-  const [code, setCode] = useState("");
+  const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function sendCode(e: React.FormEvent) {
+  async function sendLink(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setLoading(true);
@@ -23,6 +20,7 @@ export default function LoginPage() {
       email,
       options: {
         shouldCreateUser: true,
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
         data: { display_name: name },
       },
     });
@@ -31,36 +29,33 @@ export default function LoginPage() {
       setError(error.message);
       return;
     }
-    setStep("code");
-  }
-
-  async function verifyCode(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
-    const { error } = await supabase.auth.verifyOtp({
-      email,
-      token: code.trim(),
-      type: "email",
-    });
-    setLoading(false);
-    if (error) {
-      setError(error.message);
-      return;
-    }
-    router.push("/quiniela");
-    router.refresh();
+    setSent(true);
   }
 
   return (
     <div className="mx-auto mt-10 max-w-sm">
       <h1 className="mb-1 text-2xl font-bold">Entrar a la quiniela</h1>
       <p className="mb-6 text-sm text-slate-500">
-        Te enviaremos un código de verificación a tu correo.
+        Te enviaremos un enlace de acceso a tu correo. Ábrelo desde este mismo
+        dispositivo y entrarás automáticamente.
       </p>
 
-      {step === "email" ? (
-        <form onSubmit={sendCode} className="space-y-4">
+      {sent ? (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+          <p className="font-semibold">¡Revisa tu correo! 📧</p>
+          <p className="mt-1">
+            Te enviamos un enlace a <span className="font-medium">{email}</span>.
+            Haz clic en <b>“Sign in”</b> para entrar. Si no lo ves, revisa spam.
+          </p>
+          <button
+            onClick={() => setSent(false)}
+            className="mt-3 text-emerald-700 underline"
+          >
+            Usar otro correo
+          </button>
+        </div>
+      ) : (
+        <form onSubmit={sendLink} className="space-y-4">
           <div>
             <label className="mb-1 block text-sm font-medium">Tu nombre</label>
             <input
@@ -86,34 +81,7 @@ export default function LoginPage() {
             disabled={loading}
             className="w-full rounded-lg bg-pitch py-2 font-semibold text-white hover:bg-pitchDark disabled:opacity-60"
           >
-            {loading ? "Enviando…" : "Enviar código"}
-          </button>
-        </form>
-      ) : (
-        <form onSubmit={verifyCode} className="space-y-4">
-          <p className="text-sm text-slate-600">
-            Revisa <span className="font-medium">{email}</span> e ingresa el código de 6 dígitos.
-          </p>
-          <input
-            required
-            inputMode="numeric"
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            placeholder="123456"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-center text-lg tracking-widest"
-          />
-          <button
-            disabled={loading}
-            className="w-full rounded-lg bg-pitch py-2 font-semibold text-white hover:bg-pitchDark disabled:opacity-60"
-          >
-            {loading ? "Verificando…" : "Verificar y entrar"}
-          </button>
-          <button
-            type="button"
-            onClick={() => setStep("email")}
-            className="w-full text-sm text-slate-500 hover:underline"
-          >
-            Usar otro correo
+            {loading ? "Enviando…" : "Enviar enlace de acceso"}
           </button>
         </form>
       )}
