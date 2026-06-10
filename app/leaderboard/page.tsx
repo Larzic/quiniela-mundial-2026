@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import Podium from "@/components/Podium";
 import type { LeaderboardRow } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -15,13 +16,16 @@ export default async function LeaderboardPage() {
   const rows = (data ?? []) as LeaderboardRow[];
 
   return (
-    <div>
-      <h1 className="mb-4 text-2xl font-bold">Tabla de posiciones</h1>
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+    <div className="space-y-6">
+      <h1 className="text-2xl font-black">Tabla de posiciones</h1>
+
+      <Podium rows={rows} />
+
+      <div className="nx-card overflow-hidden rounded-2xl">
         <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-left text-slate-500">
+          <thead className="bg-white/5 text-left text-white/50">
             <tr>
-              <th className="px-4 py-2 w-10">#</th>
+              <th className="w-10 px-4 py-2">#</th>
               <th className="px-4 py-2">Jugador</th>
               <th className="px-4 py-2 text-right">Aciertos</th>
               <th className="px-4 py-2 text-right">Puntos</th>
@@ -32,25 +36,25 @@ export default async function LeaderboardPage() {
               <tr
                 key={r.user_id}
                 className={[
-                  "border-t border-slate-100",
-                  r.user_id === user.id ? "bg-emerald-50" : "",
+                  "border-t border-white/5",
+                  r.user_id === user.id ? "bg-nxpink/10" : "",
                 ].join(" ")}
               >
-                <td className="px-4 py-2 font-semibold text-slate-400">
+                <td className="px-4 py-2 font-semibold text-white/40">
                   {i + 1}
                 </td>
                 <td className="px-4 py-2 font-medium">{r.display_name}</td>
-                <td className="px-4 py-2 text-right text-slate-500">
+                <td className="px-4 py-2 text-right text-white/50">
                   {r.hits}/{r.predictions}
                 </td>
-                <td className="px-4 py-2 text-right font-bold text-pitchDark">
+                <td className="px-4 py-2 text-right font-black text-nxteal">
                   {r.points}
                 </td>
               </tr>
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-slate-400">
+                <td colSpan={4} className="px-4 py-6 text-center text-white/40">
                   Aún no hay jugadores.
                 </td>
               </tr>

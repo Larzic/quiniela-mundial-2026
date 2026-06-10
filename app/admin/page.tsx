@@ -20,7 +20,7 @@ export default async function AdminPage() {
 
   if (!profile?.is_admin) {
     return (
-      <p className="rounded-lg bg-amber-50 px-4 py-3 text-amber-800">
+      <p className="nx-card rounded-lg px-4 py-3 text-nxred">
         No tienes permisos de administrador.
       </p>
     );
@@ -33,10 +33,10 @@ export default async function AdminPage() {
 
   return (
     <div>
-      <h1 className="mb-1 text-2xl font-bold">Panel de administración</h1>
-      <p className="mb-6 text-sm text-slate-500">
-        Carga el marcador final de cada partido. Al guardar, se recalculan
-        automáticamente los puntos de todos los jugadores.
+      <h1 className="mb-1 text-2xl font-black">Panel de administración</h1>
+      <p className="mb-6 text-sm text-white/50">
+        Agrega partidos de las eliminatorias y carga el marcador final de cada
+        partido. Al guardar, se recalculan automáticamente los puntos de todos.
       </p>
       <AdminResults
         teams={(teams ?? []) as Team[]}

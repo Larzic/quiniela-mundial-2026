@@ -25,11 +25,12 @@ export default async function QuinielaPage() {
 
   return (
     <div>
-      <h1 className="mb-1 text-2xl font-bold">Tus pronósticos</h1>
-      <p className="mb-6 text-sm text-slate-500">
-        Elige <b>Local (1)</b>, <b>Empate (X)</b> o <b>Visitante (2)</b>. Puedes
-        cambiar tu elección hasta que empiece el partido. Cada acierto suma
-        puntos.
+      <h1 className="mb-1 text-2xl font-black">Tus pronósticos</h1>
+      <p className="mb-6 text-sm text-white/50">
+        Elige <b className="text-white">Local (1)</b>,{" "}
+        <b className="text-white">Empate (X)</b> o{" "}
+        <b className="text-white">Visitante (2)</b>. Puedes cambiar tu elección
+        hasta que empiece el partido. Cada acierto suma puntos.
       </p>
       <PredictionGrid
         teams={(teams ?? []) as Team[]}

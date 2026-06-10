@@ -5,16 +5,40 @@ export type Team = {
   flag: string | null;
 };
 
+export type Stage = "group" | "r32" | "r16" | "qf" | "sf" | "third" | "final";
+
 export type Match = {
   id: number;
-  group_letter: string;
-  matchday: number;
+  stage: Stage;
+  group_letter: string | null;
+  matchday: number | null;
+  label: string | null;
   home_team_id: number;
   away_team_id: number;
   kickoff_at: string;
   home_score: number | null;
   away_score: number | null;
   status: "scheduled" | "finished";
+};
+
+export const STAGE_LABEL: Record<string, string> = {
+  group: "Fase de grupos",
+  r32: "Dieciseisavos",
+  r16: "Octavos",
+  qf: "Cuartos de final",
+  sf: "Semifinales",
+  third: "Tercer lugar",
+  final: "Final",
+};
+
+export const STAGE_ORDER: Record<string, number> = {
+  group: 0,
+  r32: 1,
+  r16: 2,
+  qf: 3,
+  sf: 4,
+  third: 5,
+  final: 6,
 };
 
 export type Prediction = {

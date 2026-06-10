@@ -39,6 +39,17 @@ export default async function RootLayout({
           isAdmin={isAdmin}
         />
         <main className="mx-auto max-w-3xl px-4 py-6">{children}</main>
+        <footer className="mx-auto max-w-3xl px-4 py-8 text-center text-xs text-white/40">
+          <div className="mb-2 flex items-center justify-center gap-2">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="https://www.nxtara.com/static/img/nxtara.png"
+              alt="Nxtara"
+              className="h-4 w-auto opacity-70"
+            />
+          </div>
+          Juega responsablemente · Solo pronósticos entre amigos · +18
+        </footer>
       </body>
     </html>
   );
