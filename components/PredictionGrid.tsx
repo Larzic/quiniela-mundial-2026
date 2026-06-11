@@ -512,6 +512,18 @@ export default function PredictionGrid({
         ))}
       </div>
 
+      {filter !== "all" && (
+        <p className="text-center text-xs text-white/50">
+          Mostrando solo{" "}
+          <b className="text-nxteal">
+            {filter.startsWith("g:")
+              ? `Grupo ${filter.slice(2)}`
+              : (STAGE_LABEL[filter.slice(2)] ?? filter.slice(2))}
+          </b>{" "}
+          · toca <b className="text-white">Todos</b> para ver todo
+        </p>
+      )}
+
       {msg && (
         <p className="rounded-lg bg-nxred/15 px-3 py-2 text-sm text-nxred">
           {msg}
