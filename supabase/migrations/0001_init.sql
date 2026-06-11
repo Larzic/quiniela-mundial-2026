@@ -38,12 +38,15 @@ create table if not exists public.matches (
                 check (status in ('scheduled','finished'))
 );
 
--- Pronóstico de un jugador para un partido (uno por partido)
+-- Pronóstico de un jugador para un partido (uno por partido).
+-- Se predice el marcador exacto (home_goals/away_goals); pick es el 1X2 derivado.
 create table if not exists public.predictions (
   id         bigserial primary key,
   user_id    uuid not null references public.profiles(id) on delete cascade,
   match_id   int  not null references public.matches(id) on delete cascade,
   pick       char(1) not null check (pick in ('1','X','2')),
+  home_goals int check (home_goals >= 0),
+  away_goals int check (away_goals >= 0),
   points     int  not null default 0,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -96,7 +99,8 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
 
--- Al cargar/editar el resultado de un partido, recalcula los puntos
+-- Al cargar/editar el resultado de un partido, recalcula los puntos:
+--   marcador exacto = 3 puntos · acertar solo el 1X2 = 1 punto
 create or replace function public.score_match() returns trigger
 language plpgsql security definer set search_path = public as $$
 declare res char(1);
@@ -104,7 +108,11 @@ begin
   res := public.match_result(new.home_score, new.away_score);
   if new.status = 'finished' and res is not null then
     update public.predictions p
-       set points = case when p.pick = res then public.points_per_hit() else 0 end
+       set points = case
+         when p.home_goals = new.home_score and p.away_goals = new.away_score then 3
+         when p.pick = res then 1
+         else 0
+       end
      where p.match_id = new.id;
   else
     update public.predictions set points = 0 where match_id = new.id;

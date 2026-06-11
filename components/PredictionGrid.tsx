@@ -5,12 +5,6 @@ import { createClient } from "@/lib/supabase/client";
 import type { Team, Match, Prediction } from "@/lib/types";
 import { STAGE_LABEL, STAGE_ORDER } from "@/lib/types";
 
-const PICKS: { value: "1" | "X" | "2"; label: string }[] = [
-  { value: "1", label: "1" },
-  { value: "X", label: "X" },
-  { value: "2", label: "2" },
-];
-
 // Los pronósticos se cierran 1 hora antes del inicio del partido.
 const LOCK_MS = 60 * 60 * 1000;
 
@@ -26,6 +20,14 @@ function formatRemaining(ms: number) {
   if (m > 0) return `${m}m ${String(s).padStart(2, "0")}s`;
   return `${s}s`;
 }
+
+function pickFromScore(h: number, a: number): "1" | "X" | "2" {
+  if (h > a) return "1";
+  if (h === a) return "X";
+  return "2";
+}
+
+type ScoreState = { h: string; a: string };
 
 export default function PredictionGrid({
   teams,
@@ -43,8 +45,28 @@ export default function PredictionGrid({
     () => Object.fromEntries(teams.map((t) => [t.id, t])),
     [teams]
   );
-  const [picks, setPicks] = useState<Record<number, "1" | "X" | "2">>(
-    Object.fromEntries(predictions.map((p) => [p.match_id, p.pick]))
+
+  // Marcadores pronosticados por partido
+  const [scores, setScores] = useState<Record<number, ScoreState>>(() =>
+    Object.fromEntries(
+      predictions
+        .filter((p) => p.home_goals !== null && p.away_goals !== null)
+        .map((p) => [
+          p.match_id,
+          { h: String(p.home_goals), a: String(p.away_goals) },
+        ])
+    )
+  );
+  // Marcador ya guardado (confirmado en BD) por partido
+  const [saved, setSaved] = useState<Record<number, ScoreState>>(() =>
+    Object.fromEntries(
+      predictions
+        .filter((p) => p.home_goals !== null && p.away_goals !== null)
+        .map((p) => [
+          p.match_id,
+          { h: String(p.home_goals), a: String(p.away_goals) },
+        ])
+    )
   );
   const [saving, setSaving] = useState<number | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -58,42 +80,56 @@ export default function PredictionGrid({
     return () => clearInterval(t);
   }, []);
 
-  async function upsertPick(matchId: number, pick: "1" | "X" | "2") {
-    return supabase
-      .from("predictions")
-      .upsert(
-        { user_id: userId, match_id: matchId, pick },
-        { onConflict: "user_id,match_id" }
-      );
+  function setGoal(matchId: number, side: "h" | "a", value: string) {
+    const clean = value.replace(/[^0-9]/g, "").slice(0, 2);
+    setScores((s) => {
+      const prev = s[matchId] ?? { h: "", a: "" };
+      return { ...s, [matchId]: { ...prev, [side]: clean } };
+    });
   }
 
-  async function choose(matchId: number, pick: "1" | "X" | "2") {
-    const prev = picks[matchId];
-    setPicks((p) => ({ ...p, [matchId]: pick }));
+  async function upsertScore(matchId: number, h: number, a: number) {
+    return supabase.from("predictions").upsert(
+      {
+        user_id: userId,
+        match_id: matchId,
+        home_goals: h,
+        away_goals: a,
+        pick: pickFromScore(h, a),
+      },
+      { onConflict: "user_id,match_id" }
+    );
+  }
+
+  async function save(matchId: number) {
+    const cur = scores[matchId];
+    if (!cur || cur.h === "" || cur.a === "") {
+      setMsg("Escribe los goles de ambos equipos antes de guardar.");
+      return;
+    }
+    const h = Number(cur.h);
+    const a = Number(cur.a);
     setSaving(matchId);
     setMsg(null);
 
-    let { error } = await upsertPick(matchId, pick);
-
-    // Si falla (p. ej. sesión/token expirado tras dejar la pestaña abierta),
-    // refresca la sesión y reintenta una vez.
+    let { error } = await upsertScore(matchId, h, a);
     if (error) {
+      // token expirado tras dejar la pestaña abierta: refresca y reintenta
       await supabase.auth.refreshSession();
-      ({ error } = await upsertPick(matchId, pick));
+      ({ error } = await upsertScore(matchId, h, a));
     }
-
     setSaving(null);
     if (error) {
-      setPicks((p) => ({ ...p, [matchId]: prev }));
       setMsg(
         "No se pudo guardar tu pronóstico. Recarga la página e inténtalo de nuevo. (" +
           error.message +
           ")"
       );
+      return;
     }
+    setSaved((s) => ({ ...s, [matchId]: { h: cur.h, a: cur.a } }));
   }
 
-  // Agrupa por etapa, y dentro de "group" por letra de grupo
   const stages = useMemo(() => {
     const byStage: Record<string, Match[]> = {};
     for (const m of matches) (byStage[m.stage] ??= []).push(m);
@@ -109,8 +145,29 @@ export default function PredictionGrid({
     const closesAt = kickoff - LOCK_MS;
     const remaining = closesAt - now;
     const locked = remaining <= 0 || m.status === "finished";
-    const urgent = !locked && remaining <= 60 * 60 * 1000; // última hora
-    const current = picks[m.id];
+    const urgent = !locked && remaining <= 60 * 60 * 1000;
+
+    const cur = scores[m.id] ?? { h: "", a: "" };
+    const sv = saved[m.id];
+    const complete = cur.h !== "" && cur.a !== "";
+    const dirty = !sv || sv.h !== cur.h || sv.a !== cur.a;
+
+    let resumen: string | null = null;
+    if (sv) {
+      const h = Number(sv.h);
+      const a = Number(sv.a);
+      const p = pickFromScore(h, a);
+      resumen =
+        p === "X"
+          ? `Empate ${h}-${a}`
+          : p === "1"
+            ? `Gana ${home?.name} ${h}-${a}`
+            : `Gana ${away?.name} ${a}-${h}`;
+    }
+
+    const goalInput =
+      "w-12 rounded-lg border border-white/15 bg-white/5 px-2 py-2 text-center text-lg font-bold text-white outline-none focus:border-nxpink disabled:opacity-50";
+
     return (
       <div className="nx-card rounded-xl p-3">
         <div className="mb-2 flex items-center justify-between text-xs text-white/40">
@@ -126,6 +183,7 @@ export default function PredictionGrid({
             })}
           </span>
         </div>
+
         {locked ? (
           <div className="mb-2 text-center text-[11px] font-semibold text-white/50">
             🔒 Apuestas cerradas
@@ -143,38 +201,57 @@ export default function PredictionGrid({
             <span className="text-white/40">· 1 h antes del partido</span>
           </div>
         )}
-        <div className="flex items-center gap-3">
-          <div className="flex-1 text-right text-sm font-medium">
+
+        {/* Marcador: goles de cada equipo */}
+        <div className="flex items-center justify-center gap-2 sm:gap-3">
+          <span className="flex-1 text-right text-sm font-semibold">
             {home?.flag} {home?.name}
-          </div>
-          <div className="flex gap-1">
-            {PICKS.map((p) => {
-              const active = current === p.value;
-              return (
-                <button
-                  key={p.value}
-                  disabled={locked || saving === m.id}
-                  onClick={() => choose(m.id, p.value)}
-                  className={[
-                    "h-9 w-9 rounded-lg border text-sm font-bold transition",
-                    active
-                      ? "border-nxpink bg-nx-grad text-white shadow-nx-glow"
-                      : "border-white/15 bg-white/5 text-white/70 hover:border-nxpink",
-                    locked ? "cursor-not-allowed opacity-50" : "",
-                  ].join(" ")}
-                >
-                  {p.label}
-                </button>
-              );
-            })}
-          </div>
-          <div className="flex-1 text-left text-sm font-medium">
+          </span>
+          <input
+            type="text"
+            inputMode="numeric"
+            placeholder="-"
+            value={cur.h}
+            disabled={locked || saving === m.id}
+            onChange={(e) => setGoal(m.id, "h", e.target.value)}
+            className={goalInput}
+          />
+          <span className="text-white/30">-</span>
+          <input
+            type="text"
+            inputMode="numeric"
+            placeholder="-"
+            value={cur.a}
+            disabled={locked || saving === m.id}
+            onChange={(e) => setGoal(m.id, "a", e.target.value)}
+            className={goalInput}
+          />
+          <span className="flex-1 text-left text-sm font-semibold">
             {away?.name} {away?.flag}
-          </div>
+          </span>
         </div>
+
+        {!locked && (
+          <div className="mt-2 flex items-center justify-center">
+            <button
+              onClick={() => save(m.id)}
+              disabled={!complete || !dirty || saving === m.id}
+              className="rounded-lg bg-nx-grad px-5 py-1.5 text-sm font-semibold text-white shadow-nx-glow transition hover:opacity-90 disabled:opacity-40"
+            >
+              {saving === m.id ? "Guardando…" : dirty ? "Guardar pronóstico" : "Guardado ✓"}
+            </button>
+          </div>
+        )}
+
+        {resumen && (
+          <div className="mt-2 text-center text-xs text-nxteal">
+            ✅ Tu pronóstico: <b>{resumen}</b>
+          </div>
+        )}
+
         {m.status === "finished" && (
-          <div className="mt-2 text-center text-xs font-semibold text-nxteal">
-            Final: {m.home_score} - {m.away_score}
+          <div className="mt-2 text-center text-xs font-semibold text-white/70">
+            Resultado final: {m.home_score} - {m.away_score}
           </div>
         )}
       </div>
@@ -194,7 +271,6 @@ export default function PredictionGrid({
         </p>
       )}
       {stages.map(([stage, ms]) => {
-        // dentro de grupos, subagrupar por letra
         if (stage === "group") {
           const byGroup: Record<string, Match[]> = {};
           for (const m of ms) (byGroup[m.group_letter ?? "?"] ??= []).push(m);

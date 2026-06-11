@@ -46,6 +46,8 @@ export type Prediction = {
   user_id: string;
   match_id: number;
   pick: "1" | "X" | "2";
+  home_goals: number | null;
+  away_goals: number | null;
   points: number;
 };
 

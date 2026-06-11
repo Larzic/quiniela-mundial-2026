@@ -27,11 +27,11 @@ export default async function QuinielaPage() {
     <div>
       <h1 className="mb-1 text-2xl font-black">Tus pronósticos</h1>
       <p className="mb-6 text-sm text-white/50">
-        Elige <b className="text-white">Local (1)</b>,{" "}
-        <b className="text-white">Empate (X)</b> o{" "}
-        <b className="text-white">Visitante (2)</b>. Puedes guardar y cambiar tu
-        pronóstico hasta <b className="text-nxteal">1 hora antes</b> de cada
-        partido. Cada acierto suma puntos.
+        Escribe los <b className="text-white">goles de cada equipo</b> y guarda
+        tu marcador. Puedes cambiarlo hasta{" "}
+        <b className="text-nxteal">1 hora antes</b> de cada partido.{" "}
+        <b className="text-white">Marcador exacto = 3 puntos</b>; acertar solo
+        quién gana o el empate = 1 punto.
       </p>
       <PredictionGrid
         teams={(teams ?? []) as Team[]}
