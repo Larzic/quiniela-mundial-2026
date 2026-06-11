@@ -95,14 +95,19 @@ function GroupStandings({
 }) {
   const rows = computeStandings(teams, matches);
   return (
-    <div className="nx-card mb-3 overflow-hidden rounded-xl">
-      <table className="w-full text-xs">
+    <div className="nx-card mb-3 overflow-x-auto rounded-xl">
+      <table className="w-full min-w-[22rem] text-[11px]">
         <thead className="bg-white/5 text-white/50">
           <tr>
             <th className="px-2 py-1.5 text-left">#</th>
             <th className="px-2 py-1.5 text-left">Equipo</th>
-            <th className="px-2 py-1.5 text-center">PJ</th>
-            <th className="px-2 py-1.5 text-center">Dif</th>
+            <th className="px-1.5 py-1.5 text-center">PJ</th>
+            <th className="px-1.5 py-1.5 text-center">G</th>
+            <th className="px-1.5 py-1.5 text-center">E</th>
+            <th className="px-1.5 py-1.5 text-center">P</th>
+            <th className="px-1.5 py-1.5 text-center">GF</th>
+            <th className="px-1.5 py-1.5 text-center">GC</th>
+            <th className="px-1.5 py-1.5 text-center">Dif</th>
             <th className="px-2 py-1.5 text-center">Pts</th>
           </tr>
         </thead>
@@ -117,11 +122,22 @@ function GroupStandings({
                 }`}
               >
                 <td className="px-2 py-1.5 text-white/40">{i + 1}</td>
-                <td className="px-2 py-1.5 font-medium">
+                <td className="whitespace-nowrap px-2 py-1.5 font-medium">
                   {r.team.flag} {r.team.name}
                 </td>
-                <td className="px-2 py-1.5 text-center text-white/60">{r.pj}</td>
-                <td className="px-2 py-1.5 text-center text-white/60">
+                <td className="px-1.5 py-1.5 text-center text-white/70">
+                  {r.pj}
+                </td>
+                <td className="px-1.5 py-1.5 text-center text-white/50">{r.g}</td>
+                <td className="px-1.5 py-1.5 text-center text-white/50">{r.e}</td>
+                <td className="px-1.5 py-1.5 text-center text-white/50">{r.p}</td>
+                <td className="px-1.5 py-1.5 text-center text-white/50">
+                  {r.gf}
+                </td>
+                <td className="px-1.5 py-1.5 text-center text-white/50">
+                  {r.gc}
+                </td>
+                <td className="px-1.5 py-1.5 text-center text-white/70">
                   {dif > 0 ? "+" : ""}
                   {dif}
                 </td>
@@ -134,7 +150,8 @@ function GroupStandings({
         </tbody>
       </table>
       <div className="bg-white/5 px-2 py-1 text-center text-[10px] text-white/40">
-        Los 2 primeros (resaltados) avanzan · se actualiza con los resultados
+        PJ jugados · G ganó · E empató · P perdió · GF/GC goles · los 2 primeros
+        avanzan
       </div>
     </div>
   );
@@ -232,8 +249,8 @@ function MatchRow({
       </div>
 
       {live &&
-        (live.state === "in" ||
-          (live.state === "post" && m.status !== "finished")) && (
+        m.status !== "finished" &&
+        (live.state === "in" || live.state === "post") && (
         <div
           className={`mb-2 rounded-lg px-2 py-1 text-center text-sm font-bold ${
             live.state === "in"
@@ -288,6 +305,9 @@ function MatchRow({
         </div>
       )}
 
+      <div className="mb-1 text-center text-[10px] uppercase tracking-wide text-white/35">
+        {locked ? "Tu pronóstico" : "Tu marcador · escribe los goles"}
+      </div>
       <div className="flex items-center justify-center gap-2 sm:gap-3">
         <span className="flex-1 text-right text-sm font-semibold">
           {home?.flag} {home?.name}
@@ -332,31 +352,34 @@ function MatchRow({
         </div>
       )}
 
-      {resumen && (
+      {resumen && m.status !== "finished" && (
         <div className="mt-2 text-center text-xs text-nxteal">
           ✅ Tu pronóstico: <b>{resumen}</b>
         </div>
       )}
 
-      {m.status === "finished" && live?.state !== "in" && (
-        <div className="mt-2 rounded-lg bg-white/5 px-2 py-1 text-center text-xs font-semibold text-white/80">
-          ✅ Resultado final · {home?.flag} {m.home_score} - {m.away_score}{" "}
-          {away?.flag}
-          <span className="font-normal text-white/40"> · ESPN</span>
-        </div>
-      )}
-
       {m.status === "finished" && (
-        <div
-          className={`mt-1 text-center text-xs font-semibold ${
-            myPoints && myPoints > 0 ? "text-nxteal" : "text-white/40"
-          }`}
-        >
-          {myPoints == null
-            ? "No pronosticaste este partido"
-            : `🏅 En este partido sumaste ${myPoints} ${
-                myPoints === 1 ? "punto" : "puntos"
-              }`}
+        <div className="mt-3 border-t border-white/10 pt-2 text-center text-xs">
+          <div className="font-semibold text-white/80">
+            ✅ Resultado final · {home?.flag} {m.home_score} - {m.away_score}{" "}
+            {away?.flag}
+            <span className="font-normal text-white/40"> · ESPN</span>
+          </div>
+          <div className="mt-1 text-white/50">
+            Tu pronóstico:{" "}
+            <b className="text-white/80">{sv ? `${sv.h}-${sv.a}` : "—"}</b> ·{" "}
+            <span
+              className={
+                myPoints && myPoints > 0
+                  ? "font-semibold text-nxteal"
+                  : "text-white/40"
+              }
+            >
+              {myPoints == null
+                ? "no jugaste"
+                : `🏅 +${myPoints} ${myPoints === 1 ? "pt" : "pts"}`}
+            </span>
+          </div>
         </div>
       )}
     </div>
