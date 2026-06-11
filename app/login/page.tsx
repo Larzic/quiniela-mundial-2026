@@ -1,35 +1,68 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
   const supabase = createClient();
+  const router = useRouter();
 
-  const [email, setEmail] = useState("");
+  const [mode, setMode] = useState<"register" | "login">("register");
   const [name, setName] = useState("");
-  const [sent, setSent] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function sendLink(e: React.FormEvent) {
+  // Recuerda nombre y correo del jugador
+  useEffect(() => {
+    const e = localStorage.getItem("qm_email");
+    if (e) setEmail(e);
+    const n = localStorage.getItem("qm_name");
+    if (n) setName(n);
+  }, []);
+
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setLoading(true);
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        shouldCreateUser: true,
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-        data: { display_name: name },
-      },
-    });
-    setLoading(false);
-    if (error) {
-      setError(error.message);
-      return;
+    localStorage.setItem("qm_email", email);
+    if (name) localStorage.setItem("qm_name", name);
+
+    if (mode === "register") {
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { display_name: name } },
+      });
+      if (error) {
+        setLoading(false);
+        const m = error.message.toLowerCase();
+        if (m.includes("already") || m.includes("registered")) {
+          setError(
+            "Ese correo ya está registrado. Cambia a “Ya tengo cuenta” para entrar."
+          );
+        } else if (m.includes("password")) {
+          setError("La contraseña debe tener al menos 6 caracteres.");
+        } else {
+          setError(error.message);
+        }
+        return;
+      }
+    } else {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (error) {
+        setLoading(false);
+        setError("Correo o contraseña incorrectos.");
+        return;
+      }
     }
-    setSent(true);
+    router.push("/quiniela");
+    router.refresh();
   }
 
   const input =
@@ -50,29 +83,40 @@ export default function LoginPage() {
       </div>
 
       <div className="nx-card rounded-2xl p-5">
-        <h2 className="mb-1 text-lg font-bold">Entrar a la quiniela</h2>
-        <p className="mb-5 text-sm text-white/50">
-          Te enviaremos un enlace de acceso a tu correo. Ábrelo desde este mismo
-          dispositivo y entrarás automáticamente.
+        {/* Toggle registro / entrar */}
+        <div className="mb-5 grid grid-cols-2 gap-1 rounded-lg bg-white/5 p-1 text-sm">
+          <button
+            onClick={() => {
+              setMode("register");
+              setError(null);
+            }}
+            className={`rounded-md py-1.5 font-semibold transition ${
+              mode === "register" ? "bg-nx-grad text-white" : "text-white/60"
+            }`}
+          >
+            Crear cuenta
+          </button>
+          <button
+            onClick={() => {
+              setMode("login");
+              setError(null);
+            }}
+            className={`rounded-md py-1.5 font-semibold transition ${
+              mode === "login" ? "bg-nx-grad text-white" : "text-white/60"
+            }`}
+          >
+            Ya tengo cuenta
+          </button>
+        </div>
+
+        <p className="mb-4 text-sm text-white/50">
+          {mode === "register"
+            ? "Regístrate con tu correo de la empresa y una contraseña."
+            : "Entra con tu correo de la empresa y tu contraseña."}
         </p>
 
-        {sent ? (
-          <div className="rounded-xl border border-nxteal/30 bg-nxteal/10 p-4 text-sm">
-            <p className="font-semibold text-nxteal">¡Revisa tu correo! 📧</p>
-            <p className="mt-1 text-white/80">
-              Te enviamos un enlace a{" "}
-              <span className="font-medium">{email}</span>. Haz clic en{" "}
-              <b>“Sign in”</b> para entrar. Si no lo ves, revisa spam.
-            </p>
-            <button
-              onClick={() => setSent(false)}
-              className="mt-3 text-nxteal underline"
-            >
-              Usar otro correo
-            </button>
-          </div>
-        ) : (
-          <form onSubmit={sendLink} className="space-y-4">
+        <form onSubmit={submit} className="space-y-4">
+          {mode === "register" && (
             <div>
               <label className="mb-1 block text-sm font-medium text-white/70">
                 Tu nombre
@@ -85,27 +129,45 @@ export default function LoginPage() {
                 className={input}
               />
             </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-white/70">
-                Correo
-              </label>
-              <input
-                required
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="tucorreo@ejemplo.com"
-                className={input}
-              />
-            </div>
-            <button
-              disabled={loading}
-              className="w-full rounded-lg bg-nx-grad py-2.5 font-semibold text-white shadow-nx-glow transition hover:opacity-90 disabled:opacity-60"
-            >
-              {loading ? "Enviando…" : "Enviar enlace de acceso"}
-            </button>
-          </form>
-        )}
+          )}
+          <div>
+            <label className="mb-1 block text-sm font-medium text-white/70">
+              Correo de la empresa
+            </label>
+            <input
+              required
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="tunombre@nxtara.com"
+              className={input}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-white/70">
+              Contraseña
+            </label>
+            <input
+              required
+              type="password"
+              minLength={6}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Mínimo 6 caracteres"
+              className={input}
+            />
+          </div>
+          <button
+            disabled={loading}
+            className="w-full rounded-lg bg-nx-grad py-2.5 font-semibold text-white shadow-nx-glow transition hover:opacity-90 disabled:opacity-60"
+          >
+            {loading
+              ? "Un momento…"
+              : mode === "register"
+                ? "Crear cuenta y entrar"
+                : "Entrar"}
+          </button>
+        </form>
 
         {error && (
           <p className="mt-4 rounded-lg bg-nxred/15 px-3 py-2 text-sm text-nxred">
