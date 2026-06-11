@@ -36,21 +36,38 @@ export default function PredictionGrid({
   const [saving, setSaving] = useState<number | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
-  async function choose(matchId: number, pick: "1" | "X" | "2") {
-    const prev = picks[matchId];
-    setPicks((p) => ({ ...p, [matchId]: pick }));
-    setSaving(matchId);
-    setMsg(null);
-    const { error } = await supabase
+  async function upsertPick(matchId: number, pick: "1" | "X" | "2") {
+    return supabase
       .from("predictions")
       .upsert(
         { user_id: userId, match_id: matchId, pick },
         { onConflict: "user_id,match_id" }
       );
+  }
+
+  async function choose(matchId: number, pick: "1" | "X" | "2") {
+    const prev = picks[matchId];
+    setPicks((p) => ({ ...p, [matchId]: pick }));
+    setSaving(matchId);
+    setMsg(null);
+
+    let { error } = await upsertPick(matchId, pick);
+
+    // Si falla (p. ej. sesión/token expirado tras dejar la pestaña abierta),
+    // refresca la sesión y reintenta una vez.
+    if (error) {
+      await supabase.auth.refreshSession();
+      ({ error } = await upsertPick(matchId, pick));
+    }
+
     setSaving(null);
     if (error) {
       setPicks((p) => ({ ...p, [matchId]: prev }));
-      setMsg(error.message);
+      setMsg(
+        "No se pudo guardar tu pronóstico. Recarga la página e inténtalo de nuevo. (" +
+          error.message +
+          ")"
+      );
     }
   }
 
