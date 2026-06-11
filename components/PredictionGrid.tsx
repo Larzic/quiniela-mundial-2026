@@ -325,8 +325,10 @@ function MatchRow({
       )}
 
       {m.status === "finished" && live?.state !== "in" && (
-        <div className="mt-2 text-center text-xs font-semibold text-white/70">
-          Resultado final: {m.home_score} - {m.away_score}
+        <div className="mt-2 rounded-lg bg-white/5 px-2 py-1 text-center text-xs font-semibold text-white/80">
+          ✅ Resultado final · {home?.flag} {m.home_score} - {m.away_score}{" "}
+          {away?.flag}
+          <span className="font-normal text-white/40"> · ESPN</span>
         </div>
       )}
     </div>
