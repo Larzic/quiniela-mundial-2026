@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from "@/lib/supabase/config";
-import { ES_TO_EN, norm } from "@/lib/livescores";
+import { toEnglish, norm } from "@/lib/livescores";
 
 export const dynamic = "force-dynamic";
 
@@ -55,10 +55,8 @@ export async function GET() {
 
     for (const m of matches ?? []) {
       if (m.status === "finished") continue;
-      const homeEn =
-        ES_TO_EN[teamName[m.home_team_id]] ?? teamName[m.home_team_id] ?? "";
-      const awayEn =
-        ES_TO_EN[teamName[m.away_team_id]] ?? teamName[m.away_team_id] ?? "";
+      const homeEn = toEnglish(teamName[m.home_team_id] ?? "");
+      const awayEn = toEnglish(teamName[m.away_team_id] ?? "");
       const key = [norm(homeEn), norm(awayEn)].sort().join("|");
       const ev = evByPair[key];
       if (!ev) continue;

@@ -61,6 +61,14 @@ export function norm(s: string): string {
     .replace(/[^a-z0-9]/g, "");
 }
 
+// Lookup normalizado (la BD guarda los nombres sin acento: "Mexico", "Sudafrica")
+const NORM_ES_TO_EN: Record<string, string> = {};
+for (const [es, en] of Object.entries(ES_TO_EN)) NORM_ES_TO_EN[norm(es)] = en;
+
+export function toEnglish(name: string): string {
+  return NORM_ES_TO_EN[norm(name)] ?? name;
+}
+
 export type LiveTeam = { name: string; score: number; homeAway: string };
 export type LiveEvent = {
   state: "pre" | "in" | "post";
@@ -96,8 +104,8 @@ export function liveForMatch(
   homeEs: string,
   awayEs: string
 ): LiveInfo | null {
-  const homeEn = ES_TO_EN[homeEs] ?? homeEs;
-  const awayEn = ES_TO_EN[awayEs] ?? awayEs;
+  const homeEn = toEnglish(homeEs);
+  const awayEn = toEnglish(awayEs);
   const key = [norm(homeEn), norm(awayEn)].sort().join("|");
   const ev = map[key];
   if (!ev) return null;
