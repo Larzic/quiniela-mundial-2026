@@ -259,7 +259,19 @@ function MatchRow({
           {toKickoff > 0 ? (
             <>
               <span className="font-semibold">
-                ⏰ Comienza en {formatRemaining(toKickoff)}
+                ⏰{" "}
+                {toKickoff > 24 * 60 * 60 * 1000
+                  ? `Comienza el ${new Date(m.kickoff_at).toLocaleString(
+                      "es-MX",
+                      {
+                        weekday: "short",
+                        day: "numeric",
+                        month: "short",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      }
+                    )}`
+                  : `Comienza en ${formatRemaining(toKickoff)}`}
               </span>
               <span className="text-white/50">
                 {" · "}
