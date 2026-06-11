@@ -8,7 +8,6 @@ import { STAGE_LABEL, STAGE_ORDER } from "@/lib/types";
 // Los pronósticos se cierran al iniciar el partido (0 = sin margen previo).
 const LOCK_MS = 0;
 
-// Formatea un tiempo restante (ms) como "2d 3h" / "3h 12m" / "12m 05s" / "45s".
 function formatRemaining(ms: number) {
   const total = Math.max(0, Math.floor(ms / 1000));
   const d = Math.floor(total / 86400);
@@ -29,6 +28,147 @@ function pickFromScore(h: number, a: number): "1" | "X" | "2" {
 
 type ScoreState = { h: string; a: string };
 
+// Fila de un partido — componente de nivel superior (estable) para que el
+// contador en vivo no desmonte los inputs y no se pierda el foco al escribir.
+function MatchRow({
+  m,
+  home,
+  away,
+  now,
+  cur,
+  sv,
+  saving,
+  onGoal,
+  onSave,
+}: {
+  m: Match;
+  home?: Team;
+  away?: Team;
+  now: number;
+  cur: ScoreState;
+  sv?: ScoreState;
+  saving: number | null;
+  onGoal: (matchId: number, side: "h" | "a", value: string) => void;
+  onSave: (matchId: number) => void;
+}) {
+  const kickoff = new Date(m.kickoff_at).getTime();
+  const closesAt = kickoff - LOCK_MS;
+  const remaining = closesAt - now;
+  const locked = remaining <= 0 || m.status === "finished";
+  const urgent = !locked && remaining <= 60 * 60 * 1000;
+
+  const complete = cur.h !== "" && cur.a !== "";
+  const dirty = !sv || sv.h !== cur.h || sv.a !== cur.a;
+
+  let resumen: string | null = null;
+  if (sv) {
+    const h = Number(sv.h);
+    const a = Number(sv.a);
+    const p = pickFromScore(h, a);
+    resumen =
+      p === "X"
+        ? `Empate ${h}-${a}`
+        : p === "1"
+          ? `Gana ${home?.name} ${h}-${a}`
+          : `Gana ${away?.name} ${a}-${h}`;
+  }
+
+  const goalInput =
+    "w-12 rounded-lg border border-white/15 bg-white/5 px-2 py-2 text-center text-lg font-bold text-white outline-none focus:border-nxpink disabled:opacity-50";
+
+  return (
+    <div className="nx-card rounded-xl p-3">
+      <div className="mb-2 flex items-center justify-between text-xs text-white/40">
+        <span>{m.label ?? (m.matchday ? `J${m.matchday}` : "")}</span>
+        <span>
+          {new Date(m.kickoff_at).toLocaleString("es-MX", {
+            weekday: "short",
+            day: "numeric",
+            month: "short",
+            hour: "2-digit",
+            minute: "2-digit",
+            timeZoneName: "short",
+          })}
+        </span>
+      </div>
+
+      {locked ? (
+        <div className="mb-2 text-center text-[11px] font-semibold text-white/50">
+          🔒 Apuestas cerradas
+        </div>
+      ) : (
+        <div
+          className={`mb-2 flex items-center justify-center gap-1 text-[11px] ${
+            urgent ? "text-nxred" : "text-nxteal/90"
+          }`}
+        >
+          <span>⏳</span>
+          <span className="font-semibold tabular-nums">
+            Cierra en {formatRemaining(remaining)}
+          </span>
+          <span className="text-white/40">· al iniciar el partido</span>
+        </div>
+      )}
+
+      <div className="flex items-center justify-center gap-2 sm:gap-3">
+        <span className="flex-1 text-right text-sm font-semibold">
+          {home?.flag} {home?.name}
+        </span>
+        <input
+          type="text"
+          inputMode="numeric"
+          placeholder="-"
+          value={cur.h}
+          disabled={locked || saving === m.id}
+          onChange={(e) => onGoal(m.id, "h", e.target.value)}
+          className={goalInput}
+        />
+        <span className="text-white/30">-</span>
+        <input
+          type="text"
+          inputMode="numeric"
+          placeholder="-"
+          value={cur.a}
+          disabled={locked || saving === m.id}
+          onChange={(e) => onGoal(m.id, "a", e.target.value)}
+          className={goalInput}
+        />
+        <span className="flex-1 text-left text-sm font-semibold">
+          {away?.name} {away?.flag}
+        </span>
+      </div>
+
+      {!locked && (
+        <div className="mt-2 flex items-center justify-center">
+          <button
+            onClick={() => onSave(m.id)}
+            disabled={!complete || !dirty || saving === m.id}
+            className="rounded-lg bg-nx-grad px-5 py-1.5 text-sm font-semibold text-white shadow-nx-glow transition hover:opacity-90 disabled:opacity-40"
+          >
+            {saving === m.id
+              ? "Guardando…"
+              : dirty
+                ? "Guardar pronóstico"
+                : "Guardado ✓"}
+          </button>
+        </div>
+      )}
+
+      {resumen && (
+        <div className="mt-2 text-center text-xs text-nxteal">
+          ✅ Tu pronóstico: <b>{resumen}</b>
+        </div>
+      )}
+
+      {m.status === "finished" && (
+        <div className="mt-2 text-center text-xs font-semibold text-white/70">
+          Resultado final: {m.home_score} - {m.away_score}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function PredictionGrid({
   teams,
   matches,
@@ -46,32 +186,24 @@ export default function PredictionGrid({
     [teams]
   );
 
-  // Marcadores pronosticados por partido
-  const [scores, setScores] = useState<Record<number, ScoreState>>(() =>
-    Object.fromEntries(
-      predictions
-        .filter((p) => p.home_goals !== null && p.away_goals !== null)
-        .map((p) => [
-          p.match_id,
-          { h: String(p.home_goals), a: String(p.away_goals) },
-        ])
-    )
+  const initial = useMemo(
+    () =>
+      Object.fromEntries(
+        predictions
+          .filter((p) => p.home_goals !== null && p.away_goals !== null)
+          .map((p) => [
+            p.match_id,
+            { h: String(p.home_goals), a: String(p.away_goals) },
+          ])
+      ) as Record<number, ScoreState>,
+    [predictions]
   );
-  // Marcador ya guardado (confirmado en BD) por partido
-  const [saved, setSaved] = useState<Record<number, ScoreState>>(() =>
-    Object.fromEntries(
-      predictions
-        .filter((p) => p.home_goals !== null && p.away_goals !== null)
-        .map((p) => [
-          p.match_id,
-          { h: String(p.home_goals), a: String(p.away_goals) },
-        ])
-    )
-  );
+
+  const [scores, setScores] = useState<Record<number, ScoreState>>(initial);
+  const [saved, setSaved] = useState<Record<number, ScoreState>>(initial);
   const [saving, setSaving] = useState<number | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
-  // Reloj en vivo (para el contador) y zona horaria local del visitante.
   const [now, setNow] = useState(() => Date.now());
   const [tz, setTz] = useState("");
   useEffect(() => {
@@ -102,19 +234,18 @@ export default function PredictionGrid({
   }
 
   async function save(matchId: number) {
-    const cur = scores[matchId];
-    if (!cur || cur.h === "" || cur.a === "") {
+    const c = scores[matchId];
+    if (!c || c.h === "" || c.a === "") {
       setMsg("Escribe los goles de ambos equipos antes de guardar.");
       return;
     }
-    const h = Number(cur.h);
-    const a = Number(cur.a);
+    const h = Number(c.h);
+    const a = Number(c.a);
     setSaving(matchId);
     setMsg(null);
 
     let { error } = await upsertScore(matchId, h, a);
     if (error) {
-      // token expirado tras dejar la pestaña abierta: refresca y reintenta
       await supabase.auth.refreshSession();
       ({ error } = await upsertScore(matchId, h, a));
     }
@@ -127,7 +258,7 @@ export default function PredictionGrid({
       );
       return;
     }
-    setSaved((s) => ({ ...s, [matchId]: { h: cur.h, a: cur.a } }));
+    setSaved((s) => ({ ...s, [matchId]: { h: c.h, a: c.a } }));
   }
 
   const stages = useMemo(() => {
@@ -138,123 +269,20 @@ export default function PredictionGrid({
     );
   }, [matches]);
 
-  function MatchRow({ m }: { m: Match }) {
-    const home = teamById[m.home_team_id];
-    const away = teamById[m.away_team_id];
-    const kickoff = new Date(m.kickoff_at).getTime();
-    const closesAt = kickoff - LOCK_MS;
-    const remaining = closesAt - now;
-    const locked = remaining <= 0 || m.status === "finished";
-    const urgent = !locked && remaining <= 60 * 60 * 1000;
-
-    const cur = scores[m.id] ?? { h: "", a: "" };
-    const sv = saved[m.id];
-    const complete = cur.h !== "" && cur.a !== "";
-    const dirty = !sv || sv.h !== cur.h || sv.a !== cur.a;
-
-    let resumen: string | null = null;
-    if (sv) {
-      const h = Number(sv.h);
-      const a = Number(sv.a);
-      const p = pickFromScore(h, a);
-      resumen =
-        p === "X"
-          ? `Empate ${h}-${a}`
-          : p === "1"
-            ? `Gana ${home?.name} ${h}-${a}`
-            : `Gana ${away?.name} ${a}-${h}`;
-    }
-
-    const goalInput =
-      "w-12 rounded-lg border border-white/15 bg-white/5 px-2 py-2 text-center text-lg font-bold text-white outline-none focus:border-nxpink disabled:opacity-50";
-
+  function renderRow(m: Match) {
     return (
-      <div className="nx-card rounded-xl p-3">
-        <div className="mb-2 flex items-center justify-between text-xs text-white/40">
-          <span>{m.label ?? (m.matchday ? `J${m.matchday}` : "")}</span>
-          <span>
-            {new Date(m.kickoff_at).toLocaleString("es-MX", {
-              weekday: "short",
-              day: "numeric",
-              month: "short",
-              hour: "2-digit",
-              minute: "2-digit",
-              timeZoneName: "short",
-            })}
-          </span>
-        </div>
-
-        {locked ? (
-          <div className="mb-2 text-center text-[11px] font-semibold text-white/50">
-            🔒 Apuestas cerradas
-          </div>
-        ) : (
-          <div
-            className={`mb-2 flex items-center justify-center gap-1 text-[11px] ${
-              urgent ? "text-nxred" : "text-nxteal/90"
-            }`}
-          >
-            <span>⏳</span>
-            <span className="font-semibold tabular-nums">
-              Cierra en {formatRemaining(remaining)}
-            </span>
-            <span className="text-white/40">· al iniciar el partido</span>
-          </div>
-        )}
-
-        {/* Marcador: goles de cada equipo */}
-        <div className="flex items-center justify-center gap-2 sm:gap-3">
-          <span className="flex-1 text-right text-sm font-semibold">
-            {home?.flag} {home?.name}
-          </span>
-          <input
-            type="text"
-            inputMode="numeric"
-            placeholder="-"
-            value={cur.h}
-            disabled={locked || saving === m.id}
-            onChange={(e) => setGoal(m.id, "h", e.target.value)}
-            className={goalInput}
-          />
-          <span className="text-white/30">-</span>
-          <input
-            type="text"
-            inputMode="numeric"
-            placeholder="-"
-            value={cur.a}
-            disabled={locked || saving === m.id}
-            onChange={(e) => setGoal(m.id, "a", e.target.value)}
-            className={goalInput}
-          />
-          <span className="flex-1 text-left text-sm font-semibold">
-            {away?.name} {away?.flag}
-          </span>
-        </div>
-
-        {!locked && (
-          <div className="mt-2 flex items-center justify-center">
-            <button
-              onClick={() => save(m.id)}
-              disabled={!complete || !dirty || saving === m.id}
-              className="rounded-lg bg-nx-grad px-5 py-1.5 text-sm font-semibold text-white shadow-nx-glow transition hover:opacity-90 disabled:opacity-40"
-            >
-              {saving === m.id ? "Guardando…" : dirty ? "Guardar pronóstico" : "Guardado ✓"}
-            </button>
-          </div>
-        )}
-
-        {resumen && (
-          <div className="mt-2 text-center text-xs text-nxteal">
-            ✅ Tu pronóstico: <b>{resumen}</b>
-          </div>
-        )}
-
-        {m.status === "finished" && (
-          <div className="mt-2 text-center text-xs font-semibold text-white/70">
-            Resultado final: {m.home_score} - {m.away_score}
-          </div>
-        )}
-      </div>
+      <MatchRow
+        key={m.id}
+        m={m}
+        home={teamById[m.home_team_id]}
+        away={teamById[m.away_team_id]}
+        now={now}
+        cur={scores[m.id] ?? { h: "", a: "" }}
+        sv={saved[m.id]}
+        saving={saving}
+        onGoal={setGoal}
+        onSave={save}
+      />
     );
   }
 
@@ -288,11 +316,7 @@ export default function PredictionGrid({
                     <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-white/60">
                       Grupo {letter}
                     </h3>
-                    <div className="space-y-2">
-                      {gm.map((m) => (
-                        <MatchRow key={m.id} m={m} />
-                      ))}
-                    </div>
+                    <div className="space-y-2">{gm.map(renderRow)}</div>
                   </div>
                 ))}
               </div>
@@ -304,11 +328,7 @@ export default function PredictionGrid({
             <h2 className="mb-4 text-xl font-black text-nxpink">
               {STAGE_LABEL[stage] ?? stage}
             </h2>
-            <div className="space-y-2">
-              {ms.map((m) => (
-                <MatchRow key={m.id} m={m} />
-              ))}
-            </div>
+            <div className="space-y-2">{ms.map(renderRow)}</div>
           </section>
         );
       })}
