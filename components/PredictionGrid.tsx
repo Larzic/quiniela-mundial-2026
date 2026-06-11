@@ -173,6 +173,7 @@ function MatchRow({
   sv,
   saving,
   live,
+  myPoints,
   onGoal,
   onSave,
 }: {
@@ -184,6 +185,7 @@ function MatchRow({
   sv?: ScoreState;
   saving: number | null;
   live?: LiveInfo | null;
+  myPoints?: number | null;
   onGoal: (matchId: number, side: "h" | "a", value: string) => void;
   onSave: (matchId: number) => void;
 }) {
@@ -331,6 +333,20 @@ function MatchRow({
           <span className="font-normal text-white/40"> · ESPN</span>
         </div>
       )}
+
+      {m.status === "finished" && (
+        <div
+          className={`mt-1 text-center text-xs font-semibold ${
+            myPoints && myPoints > 0 ? "text-nxteal" : "text-white/40"
+          }`}
+        >
+          {myPoints == null
+            ? "No pronosticaste este partido"
+            : `🏅 En este partido sumaste ${myPoints} ${
+                myPoints === 1 ? "punto" : "puntos"
+              }`}
+        </div>
+      )}
     </div>
   );
 }
@@ -350,6 +366,15 @@ export default function PredictionGrid({
   const teamById = useMemo(
     () => Object.fromEntries(teams.map((t) => [t.id, t])),
     [teams]
+  );
+  // Puntos que sumó el jugador en cada partido (solo donde pronosticó)
+  const pointsByMatch = useMemo(
+    () =>
+      Object.fromEntries(predictions.map((p) => [p.match_id, p.points])) as Record<
+        number,
+        number
+      >,
+    [predictions]
   );
   const teamsByGroup = useMemo(() => {
     const map: Record<string, Team[]> = {};
@@ -486,6 +511,7 @@ export default function PredictionGrid({
           teamById[m.home_team_id]?.name ?? "",
           teamById[m.away_team_id]?.name ?? ""
         )}
+        myPoints={pointsByMatch[m.id] ?? null}
         onGoal={setGoal}
         onSave={save}
       />
