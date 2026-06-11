@@ -20,11 +20,13 @@ export async function GET() {
     // Eventos ESPN -> mapa por par de nombres normalizados
     const evByPair: Record<
       string,
-      { state: string; teams: { name: string; score: number }[] }
+      { state: string; minute: number; teams: { name: string; score: number }[] }
     > = {};
     for (const e of espn.events ?? []) {
       const comp = e.competitions?.[0];
       const state = comp?.status?.type?.state ?? "pre";
+      const clk = comp?.status?.displayClock ?? comp?.status?.type?.shortDetail ?? "";
+      const minute = parseInt(String(clk).replace(/[^0-9].*$/, ""), 10) || 0;
       const teams = (comp?.competitors ?? []).map((c: any) => ({
         name: c.team?.name ?? c.team?.displayName ?? "",
         score: Number(c.score ?? 0),
@@ -34,7 +36,7 @@ export async function GET() {
         .map((t: { name: string }) => norm(t.name))
         .sort()
         .join("|");
-      evByPair[key] = { state, teams };
+      evByPair[key] = { state, minute, teams };
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -62,9 +64,11 @@ export async function GET() {
       if (!ev) continue;
 
       const kickoffMs = new Date(m.kickoff_at).getTime();
-      // Final si ESPN lo marca terminado, o si ya pasaron >2h del inicio.
+      // Final si ESPN lo marca terminado, o si está en vivo pero ya llegó al
+      // minuto 90+ (tiempo cumplido), o si pasaron >2h del inicio.
       const over =
         ev.state === "post" ||
+        (ev.state === "in" && ev.minute >= 90) ||
         (ev.state === "in" && now - kickoffMs > 2 * 60 * 60 * 1000);
       if (!over) continue;
 
