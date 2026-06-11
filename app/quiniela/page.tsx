@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import PredictionGrid from "@/components/PredictionGrid";
 import NicknameEditor from "@/components/NicknameEditor";
+import AutoSync from "@/components/AutoSync";
 import type { Team, Match, Prediction } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +28,7 @@ export default async function QuinielaPage() {
 
   return (
     <div>
+      <AutoSync />
       <h1 className="mb-1 text-2xl font-black">Tus pronósticos</h1>
       <p className="mb-6 text-sm text-white/50">
         Escribe los <b className="text-white">goles de cada equipo</b> y guarda

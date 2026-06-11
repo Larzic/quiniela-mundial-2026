@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import Podium from "@/components/Podium";
+import AutoSync from "@/components/AutoSync";
 import type { LeaderboardRow } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +18,7 @@ export default async function LeaderboardPage() {
 
   return (
     <div className="space-y-6">
+      <AutoSync />
       <h1 className="text-2xl font-black">Tabla de posiciones</h1>
 
       <Podium rows={rows} />
