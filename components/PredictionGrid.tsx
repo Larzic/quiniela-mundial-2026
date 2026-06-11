@@ -228,7 +228,9 @@ function MatchRow({
         </span>
       </div>
 
-      {live && (live.state === "in" || live.state === "post") && (
+      {m.status !== "finished" &&
+        live &&
+        (live.state === "in" || live.state === "post") && (
         <div
           className={`mb-2 rounded-lg px-2 py-1 text-center text-xs font-bold ${
             live.state === "in"

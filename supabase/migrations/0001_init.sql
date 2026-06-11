@@ -125,11 +125,18 @@ create trigger trg_score_match
   after update of home_score, away_score, status on public.matches
   for each row execute function public.score_match();
 
--- Bloquea pronósticos al iniciar el partido
+-- Bloquea CAMBIOS del usuario (pick/goles) al iniciar el partido.
+-- No bloquea el recálculo interno de puntos (cuando solo cambia points).
 create or replace function public.check_prediction_open() returns trigger
 language plpgsql set search_path = public as $$
 declare k timestamptz;
 begin
+  if TG_OP = 'UPDATE'
+     and new.pick is not distinct from old.pick
+     and new.home_goals is not distinct from old.home_goals
+     and new.away_goals is not distinct from old.away_goals then
+    return new;
+  end if;
   select kickoff_at into k from public.matches where id = new.match_id;
   if now() >= k then
     raise exception 'Los pronósticos para este partido ya están cerrados';
