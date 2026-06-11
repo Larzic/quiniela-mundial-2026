@@ -228,13 +228,11 @@ function MatchRow({
         </span>
       </div>
 
-      {m.status !== "finished" &&
-        live &&
-        (live.state === "in" || live.state === "post") && (
+      {live && (live.state === "in" || live.state === "post") && (
         <div
-          className={`mb-2 rounded-lg px-2 py-1 text-center text-xs font-bold ${
+          className={`mb-2 rounded-lg px-2 py-1 text-center text-sm font-bold ${
             live.state === "in"
-              ? "bg-nxred/20 text-nxred"
+              ? "animate-pulse bg-nxred/25 text-nxred"
               : "bg-white/5 text-white/70"
           }`}
         >
@@ -315,7 +313,7 @@ function MatchRow({
         </div>
       )}
 
-      {m.status === "finished" && (
+      {m.status === "finished" && live?.state !== "in" && (
         <div className="mt-2 text-center text-xs font-semibold text-white/70">
           Resultado final: {m.home_score} - {m.away_score}
         </div>
