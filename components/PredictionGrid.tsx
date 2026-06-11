@@ -5,8 +5,8 @@ import { createClient } from "@/lib/supabase/client";
 import type { Team, Match, Prediction } from "@/lib/types";
 import { STAGE_LABEL, STAGE_ORDER } from "@/lib/types";
 
-// Los pronósticos se cierran 1 hora antes del inicio del partido.
-const LOCK_MS = 60 * 60 * 1000;
+// Los pronósticos se cierran al iniciar el partido (0 = sin margen previo).
+const LOCK_MS = 0;
 
 // Formatea un tiempo restante (ms) como "2d 3h" / "3h 12m" / "12m 05s" / "45s".
 function formatRemaining(ms: number) {
@@ -198,7 +198,7 @@ export default function PredictionGrid({
             <span className="font-semibold tabular-nums">
               Cierra en {formatRemaining(remaining)}
             </span>
-            <span className="text-white/40">· 1 h antes del partido</span>
+            <span className="text-white/40">· al iniciar el partido</span>
           </div>
         )}
 
