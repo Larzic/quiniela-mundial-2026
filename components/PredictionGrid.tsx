@@ -4,6 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Team, Match, Prediction } from "@/lib/types";
 import { STAGE_LABEL, STAGE_ORDER } from "@/lib/types";
+import {
+  buildLiveMap,
+  liveForMatch,
+  type LiveEvent,
+  type LiveInfo,
+} from "@/lib/livescores";
 
 // Los pronósticos se cierran al iniciar el partido (0 = sin margen previo).
 const LOCK_MS = 0;
@@ -166,6 +172,7 @@ function MatchRow({
   cur,
   sv,
   saving,
+  live,
   onGoal,
   onSave,
 }: {
@@ -176,6 +183,7 @@ function MatchRow({
   cur: ScoreState;
   sv?: ScoreState;
   saving: number | null;
+  live?: LiveInfo | null;
   onGoal: (matchId: number, side: "h" | "a", value: string) => void;
   onSave: (matchId: number) => void;
 }) {
@@ -219,6 +227,23 @@ function MatchRow({
           })}
         </span>
       </div>
+
+      {live && (live.state === "in" || live.state === "post") && (
+        <div
+          className={`mb-2 rounded-lg px-2 py-1 text-center text-xs font-bold ${
+            live.state === "in"
+              ? "bg-nxred/20 text-nxred"
+              : "bg-white/5 text-white/70"
+          }`}
+        >
+          {live.state === "in" ? "🔴 EN VIVO" : "ESPN"} · {home?.flag}{" "}
+          {live.homeScore} - {live.awayScore} {away?.flag}
+          <span className="font-normal opacity-80">
+            {" "}
+            · {live.state === "in" ? live.clock || live.detail : live.detail}
+          </span>
+        </div>
+      )}
 
       {locked ? (
         <div className="mb-2 text-center text-[11px] font-semibold text-white/50">
@@ -351,6 +376,25 @@ export default function PredictionGrid({
     return () => clearInterval(t);
   }, []);
 
+  // Marcadores en vivo (ESPN), sondea cada 30s.
+  const [liveMap, setLiveMap] = useState<Record<string, LiveEvent>>({});
+  useEffect(() => {
+    let active = true;
+    async function load() {
+      try {
+        const r = await fetch("/api/live");
+        const d = await r.json();
+        if (active) setLiveMap(buildLiveMap(d.events ?? []));
+      } catch {}
+    }
+    load();
+    const t = setInterval(load, 30000);
+    return () => {
+      active = false;
+      clearInterval(t);
+    };
+  }, []);
+
   function setGoal(matchId: number, side: "h" | "a", value: string) {
     const clean = value.replace(/[^0-9]/g, "").slice(0, 2);
     setScores((s) => {
@@ -424,6 +468,11 @@ export default function PredictionGrid({
         cur={scores[m.id] ?? { h: "", a: "" }}
         sv={saved[m.id]}
         saving={saving}
+        live={liveForMatch(
+          liveMap,
+          teamById[m.home_team_id]?.name ?? "",
+          teamById[m.away_team_id]?.name ?? ""
+        )}
         onGoal={setGoal}
         onSave={save}
       />
