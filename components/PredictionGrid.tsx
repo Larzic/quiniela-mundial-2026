@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Team, Match, Prediction } from "@/lib/types";
 import { STAGE_LABEL, STAGE_ORDER } from "@/lib/types";
@@ -13,6 +13,19 @@ const PICKS: { value: "1" | "X" | "2"; label: string }[] = [
 
 // Los pronósticos se cierran 1 hora antes del inicio del partido.
 const LOCK_MS = 60 * 60 * 1000;
+
+// Formatea un tiempo restante (ms) como "2d 3h" / "3h 12m" / "12m 05s" / "45s".
+function formatRemaining(ms: number) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const d = Math.floor(total / 86400);
+  const h = Math.floor((total % 86400) / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${String(m).padStart(2, "0")}m`;
+  if (m > 0) return `${m}m ${String(s).padStart(2, "0")}s`;
+  return `${s}s`;
+}
 
 export default function PredictionGrid({
   teams,
@@ -35,6 +48,15 @@ export default function PredictionGrid({
   );
   const [saving, setSaving] = useState<number | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+
+  // Reloj en vivo (para el contador) y zona horaria local del visitante.
+  const [now, setNow] = useState(() => Date.now());
+  const [tz, setTz] = useState("");
+  useEffect(() => {
+    setTz(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   async function upsertPick(matchId: number, pick: "1" | "X" | "2") {
     return supabase
@@ -85,7 +107,9 @@ export default function PredictionGrid({
     const away = teamById[m.away_team_id];
     const kickoff = new Date(m.kickoff_at).getTime();
     const closesAt = kickoff - LOCK_MS;
-    const locked = closesAt <= Date.now() || m.status === "finished";
+    const remaining = closesAt - now;
+    const locked = remaining <= 0 || m.status === "finished";
+    const urgent = !locked && remaining <= 60 * 60 * 1000; // última hora
     const current = picks[m.id];
     return (
       <div className="nx-card rounded-xl p-3">
@@ -98,21 +122,25 @@ export default function PredictionGrid({
               month: "short",
               hour: "2-digit",
               minute: "2-digit",
+              timeZoneName: "short",
             })}
-            {locked ? " · 🔒 cerrado" : ""}
           </span>
         </div>
-        {!locked && (
-          <div className="mb-2 text-center text-[11px] text-nxteal/80">
-            Puedes cambiar tu pronóstico hasta{" "}
-            {new Date(closesAt).toLocaleString("es-MX", {
-              weekday: "short",
-              day: "numeric",
-              month: "short",
-              hour: "2-digit",
-              minute: "2-digit",
-            })}{" "}
-            (1 h antes)
+        {locked ? (
+          <div className="mb-2 text-center text-[11px] font-semibold text-white/50">
+            🔒 Apuestas cerradas
+          </div>
+        ) : (
+          <div
+            className={`mb-2 flex items-center justify-center gap-1 text-[11px] ${
+              urgent ? "text-nxred" : "text-nxteal/90"
+            }`}
+          >
+            <span>⏳</span>
+            <span className="font-semibold tabular-nums">
+              Cierra en {formatRemaining(remaining)}
+            </span>
+            <span className="text-white/40">· 1 h antes del partido</span>
           </div>
         )}
         <div className="flex items-center gap-3">
@@ -155,6 +183,11 @@ export default function PredictionGrid({
 
   return (
     <div className="space-y-10">
+      {tz && (
+        <p className="text-center text-xs text-white/40">
+          🕒 Horarios y contador en tu hora local ({tz})
+        </p>
+      )}
       {msg && (
         <p className="rounded-lg bg-nxred/15 px-3 py-2 text-sm text-nxred">
           {msg}
