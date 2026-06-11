@@ -5,29 +5,43 @@ import { toEnglish, norm } from "@/lib/livescores";
 
 export const dynamic = "force-dynamic";
 
-// Trae los resultados FINALES de ESPN y los guarda en la BD (lo que reparte
-// los puntos y actualiza la tabla de cada grupo). Idempotente: no toca partidos
-// ya finalizados ni futuros.
+const ESPN =
+  "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard";
+
+// Sincroniza desde ESPN: (1) horarios reales de cada partido y (2) resultados
+// finales (que reparten puntos y actualizan la tabla del grupo). Idempotente.
 export async function GET() {
   try {
-    const espnRes = await fetch(
-      "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard",
-      { next: { revalidate: 20 } }
-    );
-    if (!espnRes.ok) return NextResponse.json({ updated: 0 });
-    const espn = await espnRes.json();
+    const dates: string[] = [];
+    for (let d = 11; d <= 27; d++)
+      dates.push(`202606${String(d).padStart(2, "0")}`);
 
-    // Eventos ESPN -> mapa por par de nombres normalizados
+    const results = await Promise.all(
+      dates.map((dt) =>
+        fetch(`${ESPN}?dates=${dt}`, { next: { revalidate: 60 } })
+          .then((r) => (r.ok ? r.json() : { events: [] }))
+          .catch(() => ({ events: [] }))
+      )
+    );
+    const allEvents = results.flatMap((d: any) => d.events ?? []);
+
     const evByPair: Record<
       string,
-      { state: string; minute: number; teams: { name: string; score: number }[] }
+      {
+        state: string;
+        minute: number;
+        date: string;
+        teams: { name: string; score: number }[];
+      }
     > = {};
-    for (const e of espn.events ?? []) {
+    for (const e of allEvents) {
       const comp = e.competitions?.[0];
-      const state = comp?.status?.type?.state ?? "pre";
-      const clk = comp?.status?.displayClock ?? comp?.status?.type?.shortDetail ?? "";
+      if (!comp) continue;
+      const state = comp.status?.type?.state ?? "pre";
+      const clk = comp.status?.displayClock ?? "";
       const minute = parseInt(String(clk).replace(/[^0-9].*$/, ""), 10) || 0;
-      const teams = (comp?.competitors ?? []).map((c: any) => ({
+      const date = comp.startDate ?? e.date ?? "";
+      const teams = (comp.competitors ?? []).map((c: any) => ({
         name: c.team?.name ?? c.team?.displayName ?? "",
         score: Number(c.score ?? 0),
       }));
@@ -36,7 +50,7 @@ export async function GET() {
         .map((t: { name: string }) => norm(t.name))
         .sort()
         .join("|");
-      evByPair[key] = { state, minute, teams };
+      evByPair[key] = { state, minute, date, teams };
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -46,35 +60,42 @@ export async function GET() {
         .select("id, home_team_id, away_team_id, kickoff_at, status"),
       supabase.from("teams").select("id, name"),
     ]);
-
     const teamName: Record<number, string> = {};
     for (const t of teams ?? []) teamName[t.id] = t.name;
 
-    const now = Date.now();
     let updated = 0;
+    let timesSynced = 0;
 
     for (const m of matches ?? []) {
-      if (m.status === "finished") continue;
       const homeEn = toEnglish(teamName[m.home_team_id] ?? "");
       const awayEn = toEnglish(teamName[m.away_team_id] ?? "");
       const key = [norm(homeEn), norm(awayEn)].sort().join("|");
       const ev = evByPair[key];
       if (!ev) continue;
 
-      const kickoffMs = new Date(m.kickoff_at).getTime();
-      // Final si ESPN lo marca terminado, o si está en vivo pero ya llegó al
-      // minuto 90+ (tiempo cumplido), o si pasaron >2h del inicio.
-      const over =
-        ev.state === "post" ||
-        (ev.state === "in" && ev.minute >= 90) ||
-        (ev.state === "in" && now - kickoffMs > 2 * 60 * 60 * 1000);
-      if (!over) continue;
+      // 1) Horario real
+      if (m.status !== "finished" && ev.date) {
+        const espnMs = new Date(ev.date).getTime();
+        if (
+          !Number.isNaN(espnMs) &&
+          espnMs !== new Date(m.kickoff_at).getTime()
+        ) {
+          const { error } = await supabase.rpc("set_kickoff", {
+            p_match_id: m.id,
+            p_kickoff: new Date(espnMs).toISOString(),
+          });
+          if (!error) timesSynced++;
+        }
+      }
 
+      // 2) Resultado final
+      if (m.status === "finished") continue;
+      const over = ev.state === "post" || (ev.state === "in" && ev.minute >= 90);
+      if (!over) continue;
       const hs =
         ev.teams.find((t) => norm(t.name) === norm(homeEn))?.score ?? 0;
       const as =
         ev.teams.find((t) => norm(t.name) === norm(awayEn))?.score ?? 0;
-
       const { error } = await supabase.rpc("apply_result", {
         p_match_id: m.id,
         p_home: hs,
@@ -83,7 +104,7 @@ export async function GET() {
       if (!error) updated++;
     }
 
-    return NextResponse.json({ updated });
+    return NextResponse.json({ updated, timesSynced });
   } catch (e) {
     return NextResponse.json({ updated: 0, error: String(e) });
   }
