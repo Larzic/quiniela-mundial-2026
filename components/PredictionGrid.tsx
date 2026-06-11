@@ -416,7 +416,7 @@ export default function PredictionGrid({
   const [saved, setSaved] = useState<Record<number, ScoreState>>(initial);
   const [saving, setSaving] = useState<number | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
-  const [filter, setFilter] = useState("all");
+  const [filter, setFilter] = useState("g:A"); // por defecto, Grupo A
 
   const [now, setNow] = useState(() => Date.now());
   const [tz, setTz] = useState("");
@@ -539,10 +539,11 @@ export default function PredictionGrid({
       )}
 
       {/* Filtro por grupo / fase */}
-      <div className="sticky top-14 z-10 -mx-4 flex gap-1.5 overflow-x-auto border-b border-white/10 bg-nxink/85 px-4 py-2 backdrop-blur">
+      <div className="sticky top-14 z-10 -mx-4 flex items-stretch gap-1.5 overflow-x-auto border-b border-white/10 bg-nxink/85 px-4 py-2 backdrop-blur">
         <FilterChip active={filter === "all"} onClick={() => setFilter("all")}>
-          Todos
+          🌎 Todos
         </FilterChip>
+        <span className="mx-1 w-px shrink-0 self-stretch bg-white/15" />
         {groupLetters.map((L) => (
           <FilterChip
             key={L}
