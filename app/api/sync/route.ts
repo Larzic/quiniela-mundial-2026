@@ -8,22 +8,14 @@ export const dynamic = "force-dynamic";
 const ESPN =
   "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard";
 
-// Sincroniza desde ESPN: (1) horarios reales de cada partido y (2) resultados
-// finales (que reparten puntos y actualizan la tabla del grupo). Idempotente.
+// Sincroniza desde el scoreboard de ESPN (partidos del día, con su fecha real
+// y estado en vivo): (1) horario real de cada partido y (2) resultados finales
+// (que reparten puntos y actualizan la tabla del grupo). Idempotente.
 export async function GET() {
   try {
-    const dates: string[] = [];
-    for (let d = 11; d <= 27; d++)
-      dates.push(`202606${String(d).padStart(2, "0")}`);
-
-    const results = await Promise.all(
-      dates.map((dt) =>
-        fetch(`${ESPN}?dates=${dt}`, { next: { revalidate: 60 } })
-          .then((r) => (r.ok ? r.json() : { events: [] }))
-          .catch(() => ({ events: [] }))
-      )
-    );
-    const allEvents = results.flatMap((d: any) => d.events ?? []);
+    const res = await fetch(ESPN, { next: { revalidate: 20 } });
+    if (!res.ok) return NextResponse.json({ updated: 0, timesSynced: 0 });
+    const data = await res.json();
 
     const evByPair: Record<
       string,
@@ -34,7 +26,7 @@ export async function GET() {
         teams: { name: string; score: number }[];
       }
     > = {};
-    for (const e of allEvents) {
+    for (const e of data.events ?? []) {
       const comp = e.competitions?.[0];
       if (!comp) continue;
       const state = comp.status?.type?.state ?? "pre";
@@ -73,7 +65,7 @@ export async function GET() {
       const ev = evByPair[key];
       if (!ev) continue;
 
-      // 1) Horario real
+      // 1) Horario real (si no está finalizado)
       if (m.status !== "finished" && ev.date) {
         const espnMs = new Date(ev.date).getTime();
         if (
