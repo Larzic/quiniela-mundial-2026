@@ -29,9 +29,10 @@ export default async function QuinielaPage() {
       <p className="mb-6 text-sm text-white/50">
         Escribe los <b className="text-white">goles de cada equipo</b> y guarda
         tu marcador. Puedes cambiarlo hasta{" "}
-        <b className="text-nxteal">1 hora antes</b> de cada partido.{" "}
-        <b className="text-white">Marcador exacto = 3 puntos</b>; acertar solo
-        quién gana o el empate = 1 punto.
+        <b className="text-nxteal">1 hora antes</b> de cada partido. Puntos:{" "}
+        <b className="text-white">1 punto</b> por acertar quién gana o el empate,
+        y <b className="text-white">+2 adicionales</b> si aciertas el marcador
+        exacto <span className="text-white/60">(3 en total)</span>.
       </p>
       <PredictionGrid
         teams={(teams ?? []) as Team[]}
