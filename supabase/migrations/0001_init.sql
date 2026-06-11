@@ -138,8 +138,8 @@ begin
     return new;
   end if;
   select kickoff_at into k from public.matches where id = new.match_id;
-  if now() >= k then
-    raise exception 'Los pronósticos para este partido ya están cerrados';
+  if now() >= k - interval '1 minute' then
+    raise exception 'Los pronósticos se cierran 1 minuto antes del partido';
   end if;
   new.updated_at := now();
   return new;

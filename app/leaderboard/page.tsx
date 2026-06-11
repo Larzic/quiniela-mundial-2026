@@ -15,6 +15,10 @@ export default async function LeaderboardPage() {
 
   const { data } = await supabase.from("leaderboard").select("*");
   const rows = (data ?? []) as LeaderboardRow[];
+  // Lugar por puntos: empates comparten el mismo número.
+  const ranks = rows.map(
+    (r) => 1 + rows.filter((o) => o.points > r.points).length
+  );
 
   return (
     <div className="space-y-6">
@@ -43,7 +47,7 @@ export default async function LeaderboardPage() {
                 ].join(" ")}
               >
                 <td className="px-4 py-2 font-semibold text-white/40">
-                  {i + 1}
+                  {ranks[i]}
                 </td>
                 <td className="px-4 py-2 font-medium">{r.display_name}</td>
                 <td className="px-4 py-2 text-right text-white/50">

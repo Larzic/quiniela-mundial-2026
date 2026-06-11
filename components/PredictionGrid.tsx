@@ -11,8 +11,8 @@ import {
   type LiveInfo,
 } from "@/lib/livescores";
 
-// Los pronósticos se cierran al iniciar el partido (0 = sin margen previo).
-const LOCK_MS = 0;
+// Los pronósticos se cierran 1 minuto antes del inicio del partido.
+const LOCK_MS = 60 * 1000;
 
 function formatRemaining(ms: number) {
   const total = Math.max(0, Math.floor(ms / 1000));
@@ -192,6 +192,8 @@ function MatchRow({
   const remaining = closesAt - now;
   const locked = remaining <= 0 || m.status === "finished";
   const urgent = !locked && remaining <= 60 * 60 * 1000;
+  const started = now >= kickoff;
+  const toKickoff = kickoff - now;
 
   const complete = cur.h !== "" && cur.a !== "";
   const dirty = !sv || sv.h !== cur.h || sv.a !== cur.a;
@@ -245,23 +247,29 @@ function MatchRow({
         </div>
       )}
 
-      {locked ? (
-        <div className="mb-2 text-center text-[11px] font-semibold text-white/50">
-          🔒 Apuestas cerradas
-        </div>
-      ) : (
-        <div
-          className={`mb-2 flex items-center justify-center gap-1 text-[11px] ${
-            urgent ? "text-nxred" : "text-nxteal/90"
-          }`}
-        >
-          <span>⏳</span>
-          <span className="font-semibold tabular-nums">
-            Cierra en {formatRemaining(remaining)}
-          </span>
-          <span className="text-white/40">· al iniciar el partido</span>
-        </div>
-      )}
+      {m.status !== "finished" &&
+        live?.state !== "in" &&
+        (started ? (
+          <div className="mb-2 text-center text-[11px] font-semibold text-nxred">
+            🔴 En juego{locked ? " · 🔒 apuestas cerradas" : ""}
+          </div>
+        ) : (
+          <div
+            className={`mb-2 text-center text-[11px] ${
+              urgent ? "text-nxred" : "text-nxteal/90"
+            }`}
+          >
+            <span className="font-semibold">
+              ⏰ Aún no comienza · empieza en {formatRemaining(toKickoff)}
+            </span>
+            <span className="text-white/50">
+              {" · "}
+              {locked
+                ? "🔒 apuestas cerradas"
+                : "⏳ apuestas hasta 1 min antes"}
+            </span>
+          </div>
+        ))}
 
       <div className="flex items-center justify-center gap-2 sm:gap-3">
         <span className="flex-1 text-right text-sm font-semibold">
