@@ -28,8 +28,136 @@ function pickFromScore(h: number, a: number): "1" | "X" | "2" {
 
 type ScoreState = { h: string; a: string };
 
-// Fila de un partido — componente de nivel superior (estable) para que el
-// contador en vivo no desmonte los inputs y no se pierda el foco al escribir.
+// ---- Tabla de posiciones de un grupo (con resultados reales) ----
+type StandRow = {
+  team: Team;
+  pj: number;
+  g: number;
+  e: number;
+  p: number;
+  gf: number;
+  gc: number;
+  pts: number;
+};
+
+function computeStandings(groupTeams: Team[], groupMatches: Match[]): StandRow[] {
+  const map = new Map<number, StandRow>();
+  for (const t of groupTeams)
+    map.set(t.id, { team: t, pj: 0, g: 0, e: 0, p: 0, gf: 0, gc: 0, pts: 0 });
+  for (const m of groupMatches) {
+    if (m.status !== "finished" || m.home_score == null || m.away_score == null)
+      continue;
+    const h = map.get(m.home_team_id);
+    const a = map.get(m.away_team_id);
+    if (!h || !a) continue;
+    h.pj++;
+    a.pj++;
+    h.gf += m.home_score;
+    h.gc += m.away_score;
+    a.gf += m.away_score;
+    a.gc += m.home_score;
+    if (m.home_score > m.away_score) {
+      h.g++;
+      h.pts += 3;
+      a.p++;
+    } else if (m.home_score < m.away_score) {
+      a.g++;
+      a.pts += 3;
+      h.p++;
+    } else {
+      h.e++;
+      a.e++;
+      h.pts++;
+      a.pts++;
+    }
+  }
+  return [...map.values()].sort(
+    (x, y) =>
+      y.pts - x.pts ||
+      y.gf - y.gc - (x.gf - x.gc) ||
+      y.gf - x.gf ||
+      x.team.name.localeCompare(y.team.name)
+  );
+}
+
+function GroupStandings({
+  teams,
+  matches,
+}: {
+  teams: Team[];
+  matches: Match[];
+}) {
+  const rows = computeStandings(teams, matches);
+  return (
+    <div className="nx-card mb-3 overflow-hidden rounded-xl">
+      <table className="w-full text-xs">
+        <thead className="bg-white/5 text-white/50">
+          <tr>
+            <th className="px-2 py-1.5 text-left">#</th>
+            <th className="px-2 py-1.5 text-left">Equipo</th>
+            <th className="px-2 py-1.5 text-center">PJ</th>
+            <th className="px-2 py-1.5 text-center">Dif</th>
+            <th className="px-2 py-1.5 text-center">Pts</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => {
+            const dif = r.gf - r.gc;
+            return (
+              <tr
+                key={r.team.id}
+                className={`border-t border-white/5 ${
+                  i < 2 ? "bg-nxteal/5" : ""
+                }`}
+              >
+                <td className="px-2 py-1.5 text-white/40">{i + 1}</td>
+                <td className="px-2 py-1.5 font-medium">
+                  {r.team.flag} {r.team.name}
+                </td>
+                <td className="px-2 py-1.5 text-center text-white/60">{r.pj}</td>
+                <td className="px-2 py-1.5 text-center text-white/60">
+                  {dif > 0 ? "+" : ""}
+                  {dif}
+                </td>
+                <td className="px-2 py-1.5 text-center font-black text-nxteal">
+                  {r.pts}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <div className="bg-white/5 px-2 py-1 text-center text-[10px] text-white/40">
+        Los 2 primeros (resaltados) avanzan · se actualiza con los resultados
+      </div>
+    </div>
+  );
+}
+
+function FilterChip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold transition ${
+        active
+          ? "bg-nx-grad text-white shadow-nx-glow"
+          : "border border-white/15 bg-white/5 text-white/70 hover:border-nxpink"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+// ---- Fila de un partido (componente estable) ----
 function MatchRow({
   m,
   home,
@@ -185,6 +313,16 @@ export default function PredictionGrid({
     () => Object.fromEntries(teams.map((t) => [t.id, t])),
     [teams]
   );
+  const teamsByGroup = useMemo(() => {
+    const map: Record<string, Team[]> = {};
+    for (const t of teams) (map[t.group_letter ?? "?"] ??= []).push(t);
+    return map;
+  }, [teams]);
+  const groupLetters = useMemo(
+    () =>
+      [...new Set(teams.map((t) => t.group_letter).filter(Boolean))].sort() as string[],
+    [teams]
+  );
 
   const initial = useMemo(
     () =>
@@ -203,6 +341,7 @@ export default function PredictionGrid({
   const [saved, setSaved] = useState<Record<number, ScoreState>>(initial);
   const [saving, setSaving] = useState<number | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [filter, setFilter] = useState("all");
 
   const [now, setNow] = useState(() => Date.now());
   const [tz, setTz] = useState("");
@@ -269,6 +408,11 @@ export default function PredictionGrid({
     );
   }, [matches]);
 
+  const koStages = useMemo(
+    () => stages.map(([s]) => s).filter((s) => s !== "group"),
+    [stages]
+  );
+
   function renderRow(m: Match) {
     return (
       <MatchRow
@@ -287,35 +431,72 @@ export default function PredictionGrid({
   }
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-8">
       {tz && (
         <p className="text-center text-xs text-white/40">
           🕒 Horarios y contador en tu hora local ({tz})
         </p>
       )}
+
+      {/* Filtro por grupo / fase */}
+      <div className="sticky top-14 z-10 -mx-4 flex gap-1.5 overflow-x-auto border-b border-white/10 bg-nxink/85 px-4 py-2 backdrop-blur">
+        <FilterChip active={filter === "all"} onClick={() => setFilter("all")}>
+          Todos
+        </FilterChip>
+        {groupLetters.map((L) => (
+          <FilterChip
+            key={L}
+            active={filter === `g:${L}`}
+            onClick={() => setFilter(`g:${L}`)}
+          >
+            Grupo {L}
+          </FilterChip>
+        ))}
+        {koStages.map((s) => (
+          <FilterChip
+            key={s}
+            active={filter === `s:${s}`}
+            onClick={() => setFilter(`s:${s}`)}
+          >
+            {STAGE_LABEL[s] ?? s}
+          </FilterChip>
+        ))}
+      </div>
+
       {msg && (
         <p className="rounded-lg bg-nxred/15 px-3 py-2 text-sm text-nxred">
           {msg}
         </p>
       )}
+
       {stages.map(([stage, ms]) => {
         if (stage === "group") {
+          if (filter.startsWith("s:")) return null;
           const byGroup: Record<string, Match[]> = {};
           for (const m of ms) (byGroup[m.group_letter ?? "?"] ??= []).push(m);
-          const groups = Object.entries(byGroup).sort(([a], [b]) =>
+          let groups = Object.entries(byGroup).sort(([a], [b]) =>
             a.localeCompare(b)
           );
+          if (filter.startsWith("g:"))
+            groups = groups.filter(([L]) => L === filter.slice(2));
+          if (groups.length === 0) return null;
           return (
             <section key={stage}>
-              <h2 className="mb-4 text-xl font-black text-nxpink">
-                {STAGE_LABEL[stage]}
-              </h2>
-              <div className="space-y-6">
+              {filter === "all" && (
+                <h2 className="mb-4 text-xl font-black text-nxpink">
+                  {STAGE_LABEL[stage]}
+                </h2>
+              )}
+              <div className="space-y-8">
                 {groups.map(([letter, gm]) => (
                   <div key={letter}>
                     <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-white/60">
                       Grupo {letter}
                     </h3>
+                    <GroupStandings
+                      teams={teamsByGroup[letter] ?? []}
+                      matches={gm}
+                    />
                     <div className="space-y-2">{gm.map(renderRow)}</div>
                   </div>
                 ))}
@@ -323,6 +504,10 @@ export default function PredictionGrid({
             </section>
           );
         }
+
+        // Fases eliminatorias
+        if (filter.startsWith("g:")) return null;
+        if (filter.startsWith("s:") && filter.slice(2) !== stage) return null;
         return (
           <section key={stage}>
             <h2 className="mb-4 text-xl font-black text-nxpink">
