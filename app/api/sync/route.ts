@@ -80,10 +80,13 @@ export async function GET() {
         }
       }
 
-      // 2) Resultado final
-      if (m.status === "finished") continue;
-      const over = ev.state === "post" || (ev.state === "in" && ev.minute >= 90);
-      if (!over) continue;
+      // 2) Resultado FINAL (solo cuando ESPN marca el partido terminado, o
+      // como red de seguridad si pasaron >3h del inicio). apply_result corrige
+      // el marcador si cambió (goles posteriores al minuto 90).
+      const kickoffMs2 = new Date(m.kickoff_at).getTime();
+      const finalized =
+        ev.state === "post" || Date.now() - kickoffMs2 > 3 * 60 * 60 * 1000;
+      if (!finalized) continue;
       const hs =
         ev.teams.find((t) => norm(t.name) === norm(homeEn))?.score ?? 0;
       const as =

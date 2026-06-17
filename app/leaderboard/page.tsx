@@ -2,7 +2,9 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import Podium from "@/components/Podium";
 import AutoSync from "@/components/AutoSync";
-import type { LeaderboardRow } from "@/lib/types";
+import TodayBanner from "@/components/TodayBanner";
+import LeaderboardTable from "@/components/LeaderboardTable";
+import type { LeaderboardRow, PlayerHistoryRow } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -13,61 +15,30 @@ export default async function LeaderboardPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data } = await supabase.from("leaderboard").select("*");
-  const rows = (data ?? []) as LeaderboardRow[];
-  // Lugar por puntos: empates comparten el mismo número.
-  const ranks = rows.map(
-    (r) => 1 + rows.filter((o) => o.points > r.points).length
-  );
+  const [{ data: lb }, { data: hist }] = await Promise.all([
+    supabase.from("leaderboard").select("*"),
+    supabase.from("player_history").select("*"),
+  ]);
+  const rows = (lb ?? []) as LeaderboardRow[];
+  const history = (hist ?? []) as PlayerHistoryRow[];
 
   return (
     <div className="space-y-6">
       <AutoSync />
-      <h1 className="text-2xl font-black">Tabla de posiciones</h1>
+      <div>
+        <TodayBanner />
+      </div>
+      <div>
+        <h1 className="text-2xl font-black">Tabla de posiciones</h1>
+        <p className="mt-1 text-sm text-white/50">
+          Toca un jugador para ver su <b className="text-white">historial</b> de
+          aciertos y sus <b className="text-nxpink">logros</b> 🏅
+        </p>
+      </div>
 
       <Podium rows={rows} />
 
-      <div className="nx-card overflow-hidden rounded-2xl">
-        <table className="w-full text-sm">
-          <thead className="bg-white/5 text-left text-white/50">
-            <tr>
-              <th className="w-10 px-4 py-2">#</th>
-              <th className="px-4 py-2">Jugador</th>
-              <th className="px-4 py-2 text-right">Aciertos</th>
-              <th className="px-4 py-2 text-right">Puntos</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, i) => (
-              <tr
-                key={r.user_id}
-                className={[
-                  "border-t border-white/5",
-                  r.user_id === user.id ? "bg-nxpink/10" : "",
-                ].join(" ")}
-              >
-                <td className="px-4 py-2 font-semibold text-white/40">
-                  {ranks[i]}
-                </td>
-                <td className="px-4 py-2 font-medium">{r.display_name}</td>
-                <td className="px-4 py-2 text-right text-white/50">
-                  {r.hits}/{r.predictions}
-                </td>
-                <td className="px-4 py-2 text-right font-black text-nxteal">
-                  {r.points}
-                </td>
-              </tr>
-            ))}
-            {rows.length === 0 && (
-              <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-white/40">
-                  Aún no hay jugadores.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <LeaderboardTable rows={rows} history={history} currentUserId={user.id} />
     </div>
   );
 }

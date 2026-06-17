@@ -74,6 +74,7 @@ export type LiveEvent = {
   state: "pre" | "in" | "post";
   detail: string;
   clock: string;
+  date?: string;
   teams: LiveTeam[];
 };
 export type LiveInfo = {

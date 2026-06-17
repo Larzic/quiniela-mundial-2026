@@ -58,3 +58,19 @@ export type LeaderboardRow = {
   hits: number;
   predictions: number;
 };
+
+export type PlayerHistoryRow = {
+  user_id: string;
+  display_name: string;
+  match_id: number;
+  kickoff_at: string;
+  home_team: string;
+  home_flag: string | null;
+  away_team: string;
+  away_flag: string | null;
+  home_score: number | null;
+  away_score: number | null;
+  pred_home: number | null;
+  pred_away: number | null;
+  points: number;
+};

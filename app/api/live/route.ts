@@ -28,6 +28,7 @@ export async function GET() {
         state,
         detail: st.shortDetail ?? st.description ?? "",
         clock: comp?.status?.displayClock ?? "",
+        date: comp?.startDate ?? e.date ?? "",
         teams,
       };
     });
