@@ -189,7 +189,67 @@ export async function GET() {
       // ignorar fallos del bloque de eliminatorias (no romper el sync)
     }
 
-    return NextResponse.json({ updated: updated + koUpdated, timesSynced });
+    // ----------------------------------------------------------------
+    // RESPALDO: OpenFootball (dominio público, sin API key). Si ESPN no
+    // trajo el resultado de un partido que ya tiene equipos, lo tomamos de
+    // aquí como segunda fuente. ESPN es la fuente primaria (corre antes);
+    // esto solo rellena lo que quedó sin finalizar.
+    let ofUpdated = 0;
+    try {
+      const ofRes = await fetch(
+        "https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json",
+        { next: { revalidate: 300 } }
+      );
+      if (ofRes.ok) {
+        const ofData = await ofRes.json();
+        // Nombres que OpenFootball escribe distinto a ESPN
+        const OF_ALIAS: Record<string, string> = {
+          "Czech Republic": "Czechia",
+          USA: "United States",
+        };
+        const ofName = (n: string) => OF_ALIAS[n] ?? n;
+        const ofByPair: Record<string, { a: string; sa: number; sb: number }> =
+          {};
+        for (const mm of ofData.matches ?? []) {
+          const ft = mm?.score?.ft;
+          if (!Array.isArray(ft) || ft.length !== 2) continue;
+          const t1 = ofName(mm.team1 ?? "");
+          const t2 = ofName(mm.team2 ?? "");
+          if (!t1 || !t2) continue;
+          const key = [norm(t1), norm(t2)].sort().join("|");
+          ofByPair[key] = { a: norm(t1), sa: Number(ft[0]), sb: Number(ft[1]) };
+        }
+
+        const { data: pend } = await supabase
+          .from("matches")
+          .select("id, home_team_id, away_team_id")
+          .neq("status", "finished");
+
+        for (const m of pend ?? []) {
+          if (m.home_team_id == null || m.away_team_id == null) continue;
+          const he = norm(toEnglish(teamName[m.home_team_id] ?? ""));
+          const ae = norm(toEnglish(teamName[m.away_team_id] ?? ""));
+          const of = ofByPair[[he, ae].sort().join("|")];
+          if (!of) continue;
+          const hs = of.a === he ? of.sa : of.sb;
+          const as = of.a === he ? of.sb : of.sa;
+          const { error } = await supabase.rpc("apply_result", {
+            p_match_id: m.id,
+            p_home: hs,
+            p_away: as,
+          });
+          if (!error) ofUpdated++;
+        }
+      }
+    } catch {
+      // si OpenFootball falla, seguimos solo con ESPN
+    }
+
+    return NextResponse.json({
+      updated: updated + koUpdated + ofUpdated,
+      timesSynced,
+      source2: ofUpdated,
+    });
   } catch (e) {
     return NextResponse.json({ updated: 0, error: String(e) });
   }
