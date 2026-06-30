@@ -53,6 +53,7 @@ function computeStandings(groupTeams: Team[], groupMatches: Match[]): StandRow[]
   for (const m of groupMatches) {
     if (m.status !== "finished" || m.home_score == null || m.away_score == null)
       continue;
+    if (m.home_team_id == null || m.away_team_id == null) continue;
     const h = map.get(m.home_team_id);
     const a = map.get(m.away_team_id);
     if (!h || !a) continue;
@@ -212,6 +213,40 @@ function MatchRow({
   const locked = remaining <= 0 || m.status === "finished";
   const urgent = !locked && remaining <= 60 * 60 * 1000;
   const toKickoff = kickoff - now;
+  // Partido de eliminatoria aún sin equipos definidos (cupos): se muestra
+  // como "Próximamente" y todavía no se puede pronosticar.
+  const tbd = !home || !away;
+
+  if (tbd) {
+    return (
+      <div className="nx-card rounded-xl p-3">
+        <div className="mb-2 flex items-center justify-between text-[11px] text-white/40">
+          <span>{m.label ?? ""}</span>
+          <span>
+            {new Date(m.kickoff_at).toLocaleString("es-MX", {
+              weekday: "short",
+              day: "numeric",
+              month: "short",
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </span>
+        </div>
+        <div className="flex items-center justify-center gap-2 text-sm font-semibold sm:gap-3">
+          <span className="flex-1 text-right text-white/70">
+            {m.home_label ?? "Por definir"}
+          </span>
+          <span className="text-white/30">vs</span>
+          <span className="flex-1 text-left text-white/70">
+            {m.away_label ?? "Por definir"}
+          </span>
+        </div>
+        <div className="mt-2 text-center text-[11px] text-white/45">
+          🔒 Próximamente · se habilita cuando se definan los equipos
+        </div>
+      </div>
+    );
+  }
 
   const complete = cur.h !== "" && cur.a !== "";
   const dirty = !sv || sv.h !== cur.h || sv.a !== cur.a;
@@ -531,20 +566,22 @@ export default function PredictionGrid({
   );
 
   function renderRow(m: Match) {
+    const home = m.home_team_id != null ? teamById[m.home_team_id] : undefined;
+    const away = m.away_team_id != null ? teamById[m.away_team_id] : undefined;
     return (
       <MatchRow
         key={m.id}
         m={m}
-        home={teamById[m.home_team_id]}
-        away={teamById[m.away_team_id]}
+        home={home}
+        away={away}
         now={now}
         cur={scores[m.id] ?? { h: "", a: "" }}
         sv={saved[m.id]}
         saving={saving}
         live={liveForMatch(
           liveMap,
-          teamById[m.home_team_id]?.name ?? "",
-          teamById[m.away_team_id]?.name ?? ""
+          home?.name ?? "",
+          away?.name ?? ""
         )}
         myPoints={pointsByMatch[m.id] ?? null}
         onGoal={setGoal}

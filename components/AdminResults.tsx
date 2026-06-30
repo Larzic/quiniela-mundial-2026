@@ -196,8 +196,10 @@ export default function AdminResults({
       {/* Resultados */}
       <div className="space-y-2">
         {sorted.map((m) => {
-          const home = teamById[m.home_team_id];
-          const away = teamById[m.away_team_id];
+          const home = m.home_team_id != null ? teamById[m.home_team_id] : undefined;
+          const away = m.away_team_id != null ? teamById[m.away_team_id] : undefined;
+          const homeName = home?.name ?? m.home_label ?? "Por definir";
+          const awayName = away?.name ?? m.away_label ?? "Por definir";
           return (
             <div key={m.id} className="nx-card rounded-xl p-3 text-sm">
               <div className="mb-2 flex items-center justify-between text-xs text-white/40">
@@ -213,7 +215,7 @@ export default function AdminResults({
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="min-w-[8rem] flex-1 text-right font-medium">
-                  {home?.flag} {home?.name}
+                  {home?.flag} {homeName}
                 </span>
                 <input
                   type="number"
@@ -231,7 +233,7 @@ export default function AdminResults({
                   className={`${input} w-12 text-center`}
                 />
                 <span className="min-w-[8rem] flex-1 font-medium">
-                  {away?.name} {away?.flag}
+                  {awayName} {away?.flag}
                 </span>
                 <button
                   disabled={savingId === m.id}

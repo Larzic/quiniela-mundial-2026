@@ -13,8 +13,10 @@ export type Match = {
   group_letter: string | null;
   matchday: number | null;
   label: string | null;
-  home_team_id: number;
-  away_team_id: number;
+  home_team_id: number | null;
+  away_team_id: number | null;
+  home_label: string | null;
+  away_label: string | null;
   kickoff_at: string;
   home_score: number | null;
   away_score: number | null;
