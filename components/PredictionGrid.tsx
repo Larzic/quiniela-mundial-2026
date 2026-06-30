@@ -229,6 +229,7 @@ function MatchRow({
               month: "short",
               hour: "2-digit",
               minute: "2-digit",
+              timeZone: "America/Santiago",
             })}
           </span>
         </div>
@@ -278,6 +279,7 @@ function MatchRow({
             month: "short",
             hour: "2-digit",
             minute: "2-digit",
+            timeZone: "America/Santiago",
             timeZoneName: "short",
           })}
         </span>
@@ -321,6 +323,7 @@ function MatchRow({
                         month: "short",
                         hour: "2-digit",
                         minute: "2-digit",
+                        timeZone: "America/Santiago",
                       }
                     )}`
                   : `Comienza en ${formatRemaining(toKickoff)}`}

@@ -42,6 +42,7 @@ export default function TodayBanner() {
             ? new Date(ev.date).toLocaleTimeString("es-MX", {
                 hour: "2-digit",
                 minute: "2-digit",
+                timeZone: "America/Santiago",
               })
             : "";
           return (
