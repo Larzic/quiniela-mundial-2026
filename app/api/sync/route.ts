@@ -99,7 +99,97 @@ export async function GET() {
       if (!error) updated++;
     }
 
-    return NextResponse.json({ updated, timesSynced });
+    // ----------------------------------------------------------------
+    // ELIMINATORIAS: cuando ESPN ya definió el cruce (equipos reales),
+    // asignamos los equipos a nuestro partido KO (emparejando por hora de
+    // inicio) y, si ya terminó, cargamos el resultado. Mientras ESPN siga
+    // mostrando cupos ("Group A 2nd Place", isActive=false) no se toca nada,
+    // así el partido se queda como "Próximamente".
+    let koUpdated = 0;
+    try {
+      const koRes = await fetch(`${ESPN}?dates=20260628-20260720`, {
+        next: { revalidate: 60 },
+      });
+      if (koRes.ok) {
+        const koData = await koRes.json();
+        const espnByKo: Record<number, any> = {};
+        for (const e of koData.events ?? []) {
+          const comp = e.competitions?.[0];
+          if (!comp) continue;
+          const slug: string = e.season?.slug ?? "";
+          if (!slug || slug.includes("group")) continue;
+          const dt = comp.startDate ?? e.date ?? "";
+          const ms = new Date(dt).getTime();
+          if (Number.isNaN(ms)) continue;
+          espnByKo[Math.floor(ms / 60000)] = comp;
+        }
+
+        // id de cada selección por su nombre en inglés normalizado
+        const idByEn: Record<string, number> = {};
+        for (const t of teams ?? [])
+          idByEn[norm(toEnglish(t.name))] = t.id;
+
+        const { data: koMatches } = await supabase
+          .from("matches")
+          .select("id, kickoff_at, home_team_id, away_team_id, status")
+          .neq("stage", "group");
+
+        for (const m of koMatches ?? []) {
+          const koMin = Math.floor(new Date(m.kickoff_at).getTime() / 60000);
+          const comp = espnByKo[koMin];
+          if (!comp) continue;
+          const cs = comp.competitors ?? [];
+          const hc = cs.find((c: any) => c.homeAway === "home") ?? cs[0];
+          const ac = cs.find((c: any) => c.homeAway === "away") ?? cs[1];
+          if (!hc || !ac) continue;
+          const state = comp.status?.type?.state ?? "pre";
+
+          // 1) Asignar equipos reales si ESPN ya los definió (isActive=true)
+          if (
+            (m.home_team_id == null || m.away_team_id == null) &&
+            hc.team?.isActive &&
+            ac.team?.isActive
+          ) {
+            const hid =
+              idByEn[norm(hc.team.name ?? hc.team.displayName ?? "")];
+            const aid =
+              idByEn[norm(ac.team.name ?? ac.team.displayName ?? "")];
+            if (hid && aid) {
+              const { error } = await supabase.rpc("set_teams", {
+                p_match_id: m.id,
+                p_home: hid,
+                p_away: aid,
+              });
+              if (!error) {
+                koUpdated++;
+                m.home_team_id = hid;
+                m.away_team_id = aid;
+              }
+            }
+          }
+
+          // 2) Resultado final (ya con equipos asignados)
+          if (
+            m.home_team_id != null &&
+            m.away_team_id != null &&
+            state === "post"
+          ) {
+            const hs = Number(hc.score ?? 0);
+            const as = Number(ac.score ?? 0);
+            const { error } = await supabase.rpc("apply_result", {
+              p_match_id: m.id,
+              p_home: hs,
+              p_away: as,
+            });
+            if (!error) koUpdated++;
+          }
+        }
+      }
+    } catch {
+      // ignorar fallos del bloque de eliminatorias (no romper el sync)
+    }
+
+    return NextResponse.json({ updated: updated + koUpdated, timesSynced });
   } catch (e) {
     return NextResponse.json({ updated: 0, error: String(e) });
   }
